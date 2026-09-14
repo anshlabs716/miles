@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
@@ -45,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import com.example.miles.data.local.MilesDatabase
 import com.example.miles.data.local.MilesPreferences
 import com.example.miles.data.model.ActivityEntity
-import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.MilesRepository
 import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.MediaIntegration
@@ -114,7 +111,6 @@ class MainActivity : ComponentActivity() {
             val activities by repository.activities.collectAsState(initial = emptyList())
             val liveStats by smartEngine.liveStats.collectAsState()
 
-            // Location permission launcher for real GPS tracking
             val locationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
             ) { permissions ->
@@ -129,7 +125,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Ensure no unwanted preloaded seed data exists & request location
             LaunchedEffect(Unit) {
                 repository.purgePreloadedSeedData()
                 if (!locationTracker.hasLocationPermission()) {
@@ -156,53 +151,52 @@ class MainActivity : ComponentActivity() {
                 var currentTab by remember { mutableStateOf(MilesNavigationTab.HOME) }
                 var subScreen by remember { mutableStateOf(MilesSubScreen.NONE) }
                 var selectedActivity by remember { mutableStateOf<ActivityEntity?>(null) }
-                var lastBackPressTime by remember { mutableStateOf(0L) }
 
-                // System gesture navigation & swipe-to-back interception
+                // Android system back and edge-swipe navigation.
+                // Every MILES screen is handled as an in-app navigation level so a
+                // back gesture goes to the previous screen instead of unexpectedly
+                // finishing the activity.
                 BackHandler(enabled = true) {
                     when {
                         subScreen == MilesSubScreen.DISTANCE_CALCULATOR -> {
                             subScreen = MilesSubScreen.STUDIO
                         }
+                        subScreen == MilesSubScreen.ACTIVITY_DETAIL -> {
+                            subScreen = MilesSubScreen.NONE
+                        }
+                        subScreen == MilesSubScreen.STUDIO -> {
+                            subScreen = MilesSubScreen.NONE
+                        }
+                        subScreen == MilesSubScreen.DEVICES -> {
+                            subScreen = MilesSubScreen.NONE
+                        }
                         subScreen == MilesSubScreen.WORKOUT_HUD -> {
-                            // Minimize workout HUD to background and navigate safely to home without stopping workout
+                            // Going back from an active workout hides the HUD but
+                            // deliberately keeps the workout recording alive.
                             subScreen = MilesSubScreen.NONE
                             Toast.makeText(
                                 this@MainActivity,
-                                "Workout recording in background. Tap banner to return.",
+                                "Workout recording continues in the background.",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
-                        subScreen != MilesSubScreen.NONE -> {
-                            subScreen = MilesSubScreen.NONE
+                        subScreen == MilesSubScreen.SETUP -> {
+                            if (userPrefs.hasCompletedSetup) subScreen = MilesSubScreen.NONE
                         }
                         currentTab != MilesNavigationTab.HOME -> {
                             currentTab = MilesNavigationTab.HOME
                         }
                         else -> {
-                            // On Home tab: double back within 2s to exit prevents accidental closure
-                            val now = System.currentTimeMillis()
-                            if (now - lastBackPressTime < 2000L) {
-                                finish()
-                            } else {
-                                lastBackPressTime = now
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Swipe back again to exit",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                            // Never finish MILES from a single back gesture.
+                            // The app stays on Home instead of unexpectedly closing.
                         }
                     }
                 }
 
-                // Check if user needs onboarding/setup
                 if (!userPrefs.hasCompletedSetup || subScreen == MilesSubScreen.SETUP) {
                     OnboardingSetupScreen(
                         preferences = preferences,
-                        onSetupComplete = {
-                            subScreen = MilesSubScreen.NONE
-                        }
+                        onSetupComplete = { subScreen = MilesSubScreen.NONE }
                     )
                 } else {
                     val configuration = LocalConfiguration.current
@@ -218,9 +212,8 @@ class MainActivity : ComponentActivity() {
                                     tonalElevation = 6.dp
                                 ) {
                                     MilesNavigationTab.entries.forEach { tab ->
-                                        val isSelected = currentTab == tab
                                         NavigationBarItem(
-                                            selected = isSelected,
+                                            selected = currentTab == tab,
                                             onClick = {
                                                 currentTab = tab
                                                 subScreen = MilesSubScreen.NONE
@@ -246,16 +239,14 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .padding(innerPadding)
                         ) {
-                            // Navigation Rail for Tablets / Wide foldables
                             if (isExpanded && subScreen == MilesSubScreen.NONE) {
                                 NavigationRail(
                                     modifier = Modifier.fillMaxHeight(),
                                     containerColor = MaterialTheme.colorScheme.surface
                                 ) {
                                     MilesNavigationTab.entries.forEach { tab ->
-                                        val isSelected = currentTab == tab
                                         NavigationRailItem(
-                                            selected = isSelected,
+                                            selected = currentTab == tab,
                                             onClick = {
                                                 currentTab = tab
                                                 subScreen = MilesSubScreen.NONE
@@ -275,7 +266,6 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // Content Container
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -289,9 +279,7 @@ class MainActivity : ComponentActivity() {
                                                 selectedActivity = saved
                                                 subScreen = MilesSubScreen.ACTIVITY_DETAIL
                                             },
-                                            onDiscardWorkout = {
-                                                subScreen = MilesSubScreen.NONE
-                                            }
+                                            onDiscardWorkout = { subScreen = MilesSubScreen.NONE }
                                         )
                                     }
                                     MilesSubScreen.ACTIVITY_DETAIL -> {
@@ -300,18 +288,13 @@ class MainActivity : ComponentActivity() {
                                                 activity = act,
                                                 repository = repository,
                                                 onBack = { subScreen = MilesSubScreen.NONE },
-                                                onSetAsGhostReference = { ghost ->
-                                                    smartEngine.setGhostModeActivity(ghost)
-                                                },
+                                                onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) },
                                                 onDeleted = { subScreen = MilesSubScreen.NONE }
                                             )
                                         } ?: run { subScreen = MilesSubScreen.NONE }
                                     }
                                     MilesSubScreen.DEVICES -> {
-                                        DevicesScreen(
-                                            deviceManager = deviceManager,
-                                            wearCompanion = wearCompanion
-                                        )
+                                        DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion)
                                     }
                                     MilesSubScreen.STUDIO -> {
                                         MilesStudioScreen(
@@ -324,13 +307,9 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                     MilesSubScreen.DISTANCE_CALCULATOR -> {
-                                        DistanceCalculatorScreen(
-                                            onBack = { subScreen = MilesSubScreen.STUDIO }
-                                        )
+                                        DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
                                     }
-                                    MilesSubScreen.SETUP -> {
-                                        // Handled in parent check
-                                    }
+                                    MilesSubScreen.SETUP -> Unit
                                     MilesSubScreen.NONE -> {
                                         when (currentTab) {
                                             MilesNavigationTab.HOME -> {
@@ -346,16 +325,12 @@ class MainActivity : ComponentActivity() {
                                                         smartEngine.startTracking(type)
                                                         subScreen = MilesSubScreen.WORKOUT_HUD
                                                     },
-                                                    onNavigateToHud = {
-                                                        subScreen = MilesSubScreen.WORKOUT_HUD
-                                                    },
+                                                    onNavigateToHud = { subScreen = MilesSubScreen.WORKOUT_HUD },
                                                     onSelectActivity = { act ->
                                                         selectedActivity = act
                                                         subScreen = MilesSubScreen.ACTIVITY_DETAIL
                                                     },
-                                                    onOpenStudio = {
-                                                        subScreen = MilesSubScreen.STUDIO
-                                                    }
+                                                    onOpenStudio = { subScreen = MilesSubScreen.STUDIO }
                                                 )
                                             }
                                             MilesNavigationTab.JOURNAL -> {
@@ -367,11 +342,7 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 )
                                             }
-                                            MilesNavigationTab.ROUTES -> {
-                                                RouteBuilderScreen(
-                                                    repository = repository
-                                                )
-                                            }
+                                            MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository)
                                             MilesNavigationTab.PROFILE -> {
                                                 SettingsScreen(
                                                     preferences = preferences,
