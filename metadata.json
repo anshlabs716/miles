@@ -1,0 +1,7 @@
+{
+  "name": "MILES",
+  "description": "Privacy-focused, local-first activity and fitness tracker with advanced mapping, smart tracking engine, customizable themes, and Wear OS companion architecture.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
