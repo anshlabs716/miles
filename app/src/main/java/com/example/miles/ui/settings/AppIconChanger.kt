@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -71,85 +70,85 @@ fun AppIconChangerSection(
             id = "DEFAULT",
             alias = "com.example.MainActivityDefault",
             label = "Default Navy",
-            description = "Classic MILES navy blue",
+            description = "Twilight cyan runner",
             colorPreview = Color(0xFF1F5FFF)
         ),
         AppIconItem(
             id = "AMOLED_RED",
             alias = "com.example.MainActivityAmoledRed",
             label = "AMOLED Red",
-            description = "Pure black with red accents",
+            description = "Crimson on black",
             colorPreview = Color(0xFFFF2D55)
         ),
         AppIconItem(
             id = "TWILIGHT",
             alias = "com.example.MainActivityTwilight",
             label = "Twilight Violet",
-            description = "Dark blue-purple evening",
-            colorPreview = Color(0xFF00E5FF)
+            description = "Purple nebula",
+            colorPreview = Color(0xFFB388FF)
         ),
         AppIconItem(
             id = "EMERALD",
             alias = "com.example.MainActivityEmerald",
             label = "Emerald Sprint",
-            description = "Vibrant emerald green",
-            colorPreview = Color(0xFF00D97E)
+            description = "Vibrant green",
+            colorPreview = Color(0xFF00E676)
         ),
         AppIconItem(
             id = "MONOCHROME",
             alias = "com.example.MainActivityMonochrome",
             label = "Monochrome Pitch",
-            description = "Pure black minimalist",
-            colorPreview = Color(0xFF000000)
+            description = "White on black",
+            colorPreview = Color(0xFFEEEEEE)
         ),
         AppIconItem(
-            id = "SOLAR",
+            id = "SOLAR_GOLD",
             alias = "com.example.MainActivitySolar",
             label = "Solar Gold",
-            description = "Warm golden yellow",
-            colorPreview = Color(0xFFFFB81C)
+            description = "Radiant amber",
+            colorPreview = Color(0xFFFFD600)
         ),
         AppIconItem(
-            id = "CYBER",
+            id = "CYBER_CYAN",
             alias = "com.example.MainActivityCyber",
             label = "Cyberpunk Neon",
-            description = "Hot pink and cyan neon",
-            colorPreview = Color(0xFFFF00FF)
+            description = "Pink & cyan",
+            colorPreview = Color(0xFF00F0FF)
         ),
         AppIconItem(
-            id = "ARCTIC",
+            id = "ARCTIC_FROST",
             alias = "com.example.MainActivityArctic",
             label = "Arctic Frost",
-            description = "Icy cool blue",
-            colorPreview = Color(0xFF00D9FF)
+            description = "Ice cyan",
+            colorPreview = Color(0xFF00B0FF)
         ),
         AppIconItem(
-            id = "SUNSET",
+            id = "SUNSET_BLAZE",
             alias = "com.example.MainActivitySunset",
-            label = "Sunset Coral",
-            description = "Warm coral flame",
-            colorPreview = Color(0xFFFF6B6B)
+            label = "Sunset Blaze",
+            description = "Coral flame",
+            colorPreview = Color(0xFFFF6D00)
         ),
         AppIconItem(
-            id = "RETRO",
+            id = "RETRO_SYNTH",
             alias = "com.example.MainActivityRetro",
-            label = "Retro Synthwave",
-            description = "80s synthwave vibes",
-            colorPreview = Color(0xFFFF10F0)
+            label = "Retro 80s Synth",
+            description = "Magenta synthwave",
+            colorPreview = Color(0xFFFF007F)
         ),
         AppIconItem(
-            id = "LIME",
+            id = "ELECTRIC_LIME",
             alias = "com.example.MainActivityLime",
             label = "Electric Lime",
-            description = "Bright electric green",
-            colorPreview = Color(0xFFDFFF00)
+            description = "Acid lime",
+            colorPreview = Color(0xFFAEEA00)
         ),
         AppIconItem(
-            id = "ROYAL",
+            id = "ROYAL_GOLD",
             alias = "com.example.MainActivityRoyal",
             label = "Royal Obsidian",
-            description = "Deep royal with gold",
-            colorPreview = Color(0xFF7D4C00)
+            description = "Gold luxury",
+            colorPreview = Color(0xFFFFC107)
         )
     )
 
@@ -205,11 +204,10 @@ fun AppIconChangerSection(
                 items(iconOptions) { icon ->
                     IconOptionCard(
                         item = icon,
-                        isSelected = selectedIcon.id == icon.id,
+                        isSelected = selectedIcon.label == icon.label,
                         onClick = {
-                            applyAppIcon(context, icon.alias, icon.id)
-                            onIconChanged(AppIconOption.valueOf(icon.id))
-                            preferences.updatePreferences { it.copy(appIcon = AppIconOption.valueOf(icon.id)) }
+                            applyAppIcon(context, icon.alias, selectedIcon)
+                            onIconChanged(getIconOptionFromAlias(icon.alias))
                             Toast.makeText(
                                 context,
                                 "Icon changed to ${icon.label}",
@@ -310,7 +308,7 @@ private fun IconOptionCard(
     }
 }
 
-private fun applyAppIcon(context: Context, targetAlias: String, iconId: String) {
+private fun applyAppIcon(context: Context, targetAlias: String, currentIcon: AppIconOption) {
     try {
         val pm = context.packageManager
         val packageName = context.packageName
@@ -353,26 +351,43 @@ private fun refreshAppIconState(
     onComplete: () -> Unit
 ) {
     try {
-        // Re-apply the current icon to ensure proper state
         val aliasMap = mapOf(
             AppIconOption.DEFAULT to "com.example.MainActivityDefault",
             AppIconOption.AMOLED_RED to "com.example.MainActivityAmoledRed",
             AppIconOption.TWILIGHT to "com.example.MainActivityTwilight",
             AppIconOption.EMERALD to "com.example.MainActivityEmerald",
             AppIconOption.MONOCHROME to "com.example.MainActivityMonochrome",
-            AppIconOption.SOLAR to "com.example.MainActivitySolar",
-            AppIconOption.CYBER to "com.example.MainActivityCyber",
-            AppIconOption.ARCTIC to "com.example.MainActivityArctic",
-            AppIconOption.SUNSET to "com.example.MainActivitySunset",
-            AppIconOption.RETRO to "com.example.MainActivityRetro",
-            AppIconOption.LIME to "com.example.MainActivityLime",
-            AppIconOption.ROYAL to "com.example.MainActivityRoyal"
+            AppIconOption.SOLAR_GOLD to "com.example.MainActivitySolar",
+            AppIconOption.CYBER_CYAN to "com.example.MainActivityCyber",
+            AppIconOption.ARCTIC_FROST to "com.example.MainActivityArctic",
+            AppIconOption.SUNSET_BLAZE to "com.example.MainActivitySunset",
+            AppIconOption.RETRO_SYNTH to "com.example.MainActivityRetro",
+            AppIconOption.ELECTRIC_LIME to "com.example.MainActivityLime",
+            AppIconOption.ROYAL_GOLD to "com.example.MainActivityRoyal"
         )
 
         val targetAlias = aliasMap[currentIcon] ?: "com.example.MainActivityDefault"
-        applyAppIcon(context, targetAlias, currentIcon.id)
+        applyAppIcon(context, targetAlias, currentIcon)
         onComplete()
     } catch (e: Exception) {
         Toast.makeText(context, "Refresh failed: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun getIconOptionFromAlias(alias: String): AppIconOption {
+    return when (alias) {
+        "com.example.MainActivityDefault" -> AppIconOption.DEFAULT
+        "com.example.MainActivityAmoledRed" -> AppIconOption.AMOLED_RED
+        "com.example.MainActivityTwilight" -> AppIconOption.TWILIGHT
+        "com.example.MainActivityEmerald" -> AppIconOption.EMERALD
+        "com.example.MainActivityMonochrome" -> AppIconOption.MONOCHROME
+        "com.example.MainActivitySolar" -> AppIconOption.SOLAR_GOLD
+        "com.example.MainActivityCyber" -> AppIconOption.CYBER_CYAN
+        "com.example.MainActivityArctic" -> AppIconOption.ARCTIC_FROST
+        "com.example.MainActivitySunset" -> AppIconOption.SUNSET_BLAZE
+        "com.example.MainActivityRetro" -> AppIconOption.RETRO_SYNTH
+        "com.example.MainActivityLime" -> AppIconOption.ELECTRIC_LIME
+        "com.example.MainActivityRoyal" -> AppIconOption.ROYAL_GOLD
+        else -> AppIconOption.DEFAULT
     }
 }
