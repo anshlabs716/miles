@@ -6,98 +6,80 @@ import android.content.pm.PackageManager
 import android.util.Log
 import com.example.miles.data.local.AppIconOption
 
+/** Controls the launcher aliases declared in AndroidManifest.xml. */
 class AppIconManager(private val context: Context) {
+    companion object { private const val TAG = "AppIconManager" }
 
-    companion object {
-        private const val TAG = "AppIconManager"
-    }
+    private val packageManager: PackageManager
+        get() = context.packageManager
 
     /**
-     * Resolves the proper ComponentName for an AppIconOption alias.
-     * Checks both the declared aliasClass and alternative package mappings.
+     * Finds the real declared component. The AI Studio project uses an
+     * applicationId different from its Kotlin/manifest namespace, so simply
+     * concatenating context.packageName with the alias class is not reliable.
      */
-    private fun resolveComponentName(option: AppIconOption): ComponentName {
-        val simpleName = option.aliasClass.substringAfterLast('.')
-        // 1. Try manifest-relative namespace class name
-        val candidate1 = ComponentName(context.packageName, option.aliasClass)
-        // 2. Try namespace with package name
-        val candidate2 = ComponentName(context.packageName, "${context.packageName}.$simpleName")
-
-        val pm = context.packageManager
-        return try {
-            pm.getComponentEnabledSetting(candidate1)
-            candidate1
-        } catch (_: Exception) {
-            try {
-                pm.getComponentEnabledSetting(candidate2)
-                candidate2
-            } catch (_: Exception) {
-                // Default to candidate1
-                candidate1
-            }
+    private fun resolveComponentName(option: AppIconOption): ComponentName? {
+        val candidates = listOf(
+            ComponentName(context.packageName, option.aliasClass),
+            ComponentName(
+                context.packageName,
+                "${context.packageName}.${option.aliasClass.substringAfterLast('.')}"
+            )
+        )
+        return candidates.firstOrNull { candidate ->
+            runCatching {
+                packageManager.getActivityInfo(candidate, PackageManager.GET_META_DATA)
+                true
+            }.getOrDefault(false)
         }
     }
 
-    /**
-     * Enables the selected icon alias and disables all other aliases.
-     * Returns true if the operation executed without fatal exceptions.
-     */
+    /** Enables exactly one icon alias and disables every other icon alias. */
     fun setAppIcon(option: AppIconOption): Boolean {
-        val packageManager = context.packageManager
-        var anySuccess = false
+        if (resolveComponentName(option) == null) {
+            Log.e(TAG, "Launcher alias not found: ${option.aliasClass}")
+            return false
+        }
 
+        var targetEnabled = false
         AppIconOption.entries.forEach { icon ->
-            val isTarget = icon == option
-            val desiredState = if (isTarget) {
+            val component = resolveComponentName(icon) ?: return@forEach
+            val desiredState = if (icon == option) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             } else {
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED
             }
-
-            val targetComponent = resolveComponentName(icon)
-            try {
-                val currentState = packageManager.getComponentEnabledSetting(targetComponent)
-                if (currentState != desiredState) {
-                    packageManager.setComponentEnabledSetting(
-                        targetComponent,
-                        desiredState,
-                        PackageManager.DONT_KILL_APP
-                    )
-                    Log.d(TAG, "Switched ${targetComponent.className} -> $desiredState")
-                }
-                if (isTarget) anySuccess = true
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not set component ${targetComponent.className}: ${e.message}")
+            runCatching {
+                packageManager.setComponentEnabledSetting(
+                    component,
+                    desiredState,
+                    PackageManager.DONT_KILL_APP
+                )
+                if (icon == option) targetEnabled = true
+            }.onFailure { error ->
+                Log.e(TAG, "Could not update ${component.className}", error)
             }
         }
-        return anySuccess
+        return targetEnabled
     }
 
-    /**
-     * Inspects PackageManager to find which alias is currently enabled.
-     */
+    /** Reads the launcher state directly from PackageManager. */
     fun getActiveAppIcon(): AppIconOption {
-        val pm = context.packageManager
-        for (icon in AppIconOption.entries) {
-            val component = resolveComponentName(icon)
-            try {
-                val state = pm.getComponentEnabledSetting(component)
-                if (state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
-                    return icon
-                }
-            } catch (_: Exception) {
-                // Skip unresolvable
+        AppIconOption.entries.forEach { icon ->
+            val component = resolveComponentName(icon) ?: return@forEach
+            if (packageManager.getComponentEnabledSetting(component) ==
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            ) {
+                return icon
             }
         }
         return AppIconOption.DEFAULT
     }
 
-    /**
-     * Refreshes and returns the currently verified active icon in Android OS.
-     */
-    fun refreshLauncherStatus(): Pair<AppIconOption, String> {
+    /** Reconciles the manifest aliases and returns the verified active icon. */
+    fun refreshLauncherStatus(): AppIconOption {
         val active = getActiveAppIcon()
-        val totalAliases = AppIconOption.entries.size
-        return Pair(active, "Package manager verified: $totalAliases aliases registered, active: ${active.label}")
+        setAppIcon(active)
+        return getActiveAppIcon()
     }
 }
