@@ -10,90 +10,75 @@ import com.example.miles.data.local.AppIconOption
 class AppIconManager(private val context: Context) {
     companion object { private const val TAG = "AppIconManager" }
 
-    private val packageManager: PackageManager
-        get() = context.packageManager
+    private val packageManager: PackageManager get() = context.packageManager
 
-    /**
-     * Resolves the exact ComponentName recognized by Android PackageManager.
-     * Checks all candidate package/class combinations.
-     */
-    fun resolveComponentName(option: AppIconOption): ComponentName {
+    private fun candidateNames(option: AppIconOption): List<ComponentName> {
         val simpleName = option.aliasClass.substringAfterLast('.')
-        val candidates = listOf(
+        return listOf(
             ComponentName(context.packageName, "com.example.$simpleName"),
             ComponentName(context.packageName, "${context.packageName}.$simpleName"),
-            ComponentName(context.packageName, option.aliasClass),
-            ComponentName(context, option.aliasClass)
-        )
-        for (cand in candidates) {
-            val exists = runCatching {
-                val state = packageManager.getComponentEnabledSetting(cand)
-                state >= 0 // Valid Android component state (0=default, 1=enabled, 2=disabled)
-            }.getOrDefault(false)
-            if (exists) return cand
-        }
-        return candidates.first()
+            ComponentName(context.packageName, option.aliasClass)
+        ).distinct()
     }
 
-    /**
-     * Enables exactly one icon alias and disables all other icon aliases.
-     * CRITICAL: Enables the target alias FIRST before disabling others so
-     * the launcher never observes 0 active launcher components.
-     */
-    fun setAppIcon(option: AppIconOption): Boolean {
-        val targetComponent = resolveComponentName(option)
-        var targetSuccess = false
+    /** Resolve a manifest alias by asking PackageManager whether the activity actually exists. */
+    fun resolveComponentName(option: AppIconOption): ComponentName {
+        candidateNames(option).forEach { candidate ->
+            if (runCatching { packageManager.getActivityInfo(candidate, 0) }.isSuccess) {
+                return candidate
+            }
+        }
+        throw IllegalStateException("Launcher alias ${option.aliasClass} is not declared in the installed APK")
+    }
 
-        // 1. Enable target component FIRST
+    /** Enables exactly one real launcher alias and disables the other aliases. */
+    fun setAppIcon(option: AppIconOption): Boolean {
+        val target = runCatching { resolveComponentName(option) }.getOrElse {
+            Log.e(TAG, "Target launcher alias missing", it)
+            return false
+        }
+
+        // Enable the new alias first so the launcher never sees zero active aliases.
         runCatching {
             packageManager.setComponentEnabledSetting(
-                targetComponent,
+                target,
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                 PackageManager.DONT_KILL_APP
             )
-            targetSuccess = true
-            Log.d(TAG, "Successfully enabled target launcher component: ${targetComponent.className}")
-        }.onFailure { error ->
-            Log.e(TAG, "Failed to enable target component: ${targetComponent.className}", error)
+        }.onFailure {
+            Log.e(TAG, "Failed to enable ${target.className}", it)
+            return false
         }
 
-        // 2. Disable all other launcher components
-        AppIconOption.entries.forEach { icon ->
-            if (icon != option) {
-                val otherComponent = resolveComponentName(icon)
-                runCatching {
-                    packageManager.setComponentEnabledSetting(
-                        otherComponent,
-                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                        PackageManager.DONT_KILL_APP
-                    )
-                }.onFailure { error ->
-                    Log.w(TAG, "Could not disable component: ${otherComponent.className}", error)
-                }
-            }
+        AppIconOption.entries.filter { it != option }.forEach { icon ->
+            runCatching {
+                val component = resolveComponentName(icon)
+                packageManager.setComponentEnabledSetting(
+                    component,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            }.onFailure { Log.w(TAG, "Could not disable ${icon.aliasClass}", it) }
         }
-
-        return targetSuccess
+        Log.d(TAG, "Active launcher icon: ${target.className}")
+        return true
     }
 
-    /** Reads the launcher state directly from PackageManager. */
     fun getActiveAppIcon(): AppIconOption {
-        for (icon in AppIconOption.entries) {
-            val component = resolveComponentName(icon)
-            val state = runCatching {
-                packageManager.getComponentEnabledSetting(component)
-            }.getOrDefault(-1)
-            if (state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
-                return icon
-            }
+        AppIconOption.entries.forEach { icon ->
+            val enabled = runCatching {
+                packageManager.getComponentEnabledSetting(resolveComponentName(icon)) ==
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            }.getOrDefault(false)
+            if (enabled) return icon
         }
         return AppIconOption.DEFAULT
     }
 
-    /** Reconciles the manifest aliases and returns the verified active icon. */
     fun refreshLauncherStatus(): Pair<AppIconOption, String> {
         val active = getActiveAppIcon()
-        setAppIcon(active)
-        return Pair(active, "Active icon: ${active.label}")
+        val applied = setAppIcon(active)
+        return if (applied) Pair(active, "Active icon: ${active.label}")
+        else Pair(AppIconOption.DEFAULT, "Launcher icon aliases unavailable")
     }
 }
