@@ -35,7 +35,7 @@
 
 > ⚠️ **MILES IS CURRENTLY IN BETA.**
 >
-> MILES is **not finished**. Features, UI, APIs, architecture, data formats, and behavior are actively being developed and can change at any time estimated time till finished alone 2-3 weeks with a friend 1 week. 
+> MILES is **not finished**. Features, UI, APIs, architecture, data formats, and behavior are actively being developed and can change at any time estimated time till finished alone 2-3 weeks with a friend 1 week time till wear os apk 4 weeks alone with a friend 2.5-3.5 weeks.
 
 ---
 
