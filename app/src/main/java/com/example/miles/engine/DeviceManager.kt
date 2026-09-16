@@ -1,6 +1,19 @@
 package com.example.miles.engine
 
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -9,7 +22,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 
+/** Real Bluetooth LE sensor discovery/connection layer. No simulated devices are inserted. */
 enum class DeviceSourceType(val displayName: String, val category: String) {
     PHONE_GPS("Built-in Phone GNSS", "Location"),
     EXTERNAL_GNSS("External Bluetooth GPS", "Location"),
@@ -30,53 +45,217 @@ data class ConnectedSource(
 
 class DeviceManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + Job())
+    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    private val adapter: BluetoothAdapter? get() = bluetoothManager?.adapter
+    private val scanner: BluetoothLeScanner? get() = adapter?.bluetoothLeScanner
+    private val gattConnections = mutableMapOf<String, BluetoothGatt>()
 
-    // Real default: Only actual internal phone hardware sensors
-    private val _sources = MutableStateFlow<List<ConnectedSource>>(
-        listOf(
-            ConnectedSource(
-                id = "phone_gps_internal",
-                name = "Internal Phone GNSS (GPS)",
-                type = DeviceSourceType.PHONE_GPS,
-                isConnected = true,
-                batteryLevel = 100,
-                signalDbm = -50,
-                details = "Device Hardware Location Provider"
-            ),
-            ConnectedSource(
-                id = "phone_step_internal",
-                name = "Built-in Step Sensor",
-                type = DeviceSourceType.PHONE_STEP_COUNTER,
-                isConnected = true,
-                batteryLevel = 100,
-                signalDbm = 0,
-                details = "Hardware Accelerometer & Pedometer"
-            )
-        )
-    )
+    private val _sources = MutableStateFlow<List<ConnectedSource>>(emptyList())
     val sources: StateFlow<List<ConnectedSource>> = _sources.asStateFlow()
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
     val isScanningBle: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-    fun scanForNearbySensors() {
-        if (_isScanning.value) return
-        _isScanning.value = true
-        scope.launch {
-            delay(2000L)
+    private val _heartRateBpm = MutableStateFlow<Int?>(null)
+    val heartRateBpm: StateFlow<Int?> = _heartRateBpm.asStateFlow()
+
+    private val _lastBleError = MutableStateFlow<String?>(null)
+    val lastBleError: StateFlow<String?> = _lastBleError.asStateFlow()
+
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            addScanResult(result)
+        }
+        override fun onBatchScanResults(results: MutableList<ScanResult>) {
+            results.forEach(::addScanResult)
+        }
+        override fun onScanFailed(errorCode: Int) {
+            _lastBleError.value = "BLE scan failed ($errorCode)"
             _isScanning.value = false
+        }
+    }
+
+    init {
+        addInternalSources()
+    }
+
+    private fun hasScanPermission(): Boolean =
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+
+    private fun hasConnectPermission(): Boolean =
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    private fun addInternalSources() {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+        val gps = ConnectedSource(
+            id = "phone_gps_internal",
+            name = "Internal Phone GNSS",
+            type = DeviceSourceType.PHONE_GPS,
+            isConnected = true,
+            details = "Android hardware location provider"
+        )
+        val stepsAvailable = sm?.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER) != null ||
+            sm?.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_DETECTOR) != null
+        val step = ConnectedSource(
+            id = "phone_step_internal",
+            name = "Built-in Step Sensor",
+            type = DeviceSourceType.PHONE_STEP_COUNTER,
+            isConnected = stepsAvailable,
+            details = if (stepsAvailable) "Hardware step counter/detector" else "No hardware step counter detected"
+        )
+        _sources.value = listOf(gps, step)
+    }
+
+    private fun addScanResult(result: ScanResult) {
+        val device = result.device
+        val id = "ble_${device.address}"
+        val name = runCatching {
+            if (hasConnectPermission()) device.name ?: "Unnamed BLE sensor" else "BLE sensor"
+        }.getOrDefault("BLE sensor")
+        val type = classify(result)
+        val details = when (type) {
+            DeviceSourceType.BLE_HEART_RATE -> "BLE Heart Rate Service detected"
+            DeviceSourceType.EXTERNAL_GNSS -> "Possible external GNSS / navigation sensor"
+            DeviceSourceType.WEAR_OS_SENSOR -> "Wear OS / smartwatch device"
+            else -> "Bluetooth LE sensor"
+        }
+        val source = ConnectedSource(id, name, type, false, signalDbm = result.rssi, details = details)
+        _sources.value = _sources.value.filterNot { it.id == id } + source
+    }
+
+    private fun classify(result: ScanResult): DeviceSourceType {
+        val uuids = result.scanRecord?.serviceUuids.orEmpty().map { it.uuid }
+        val name = runCatching {
+            if (hasConnectPermission()) result.device.name.orEmpty().lowercase() else ""
+        }.getOrDefault("")
+        return when {
+            HEART_RATE_SERVICE in uuids || name.contains("heart") || name.contains("hrm") -> DeviceSourceType.BLE_HEART_RATE
+            name.contains("pixel watch") || name.contains("wear os") || name.contains("galaxy watch") || name.contains("watch") -> DeviceSourceType.WEAR_OS_SENSOR
+            name.contains("gps") || name.contains("gnss") || name.contains("garmin") -> DeviceSourceType.EXTERNAL_GNSS
+            else -> DeviceSourceType.BLE_HEART_RATE
+        }
+    }
+
+    fun scanForNearbySensors() {
+        if (_isScanning.value || !hasScanPermission()) {
+            if (!hasScanPermission()) _lastBleError.value = "Bluetooth scan permission required"
+            return
+        }
+        val bleScanner = scanner ?: run {
+            _lastBleError.value = "Bluetooth LE unavailable"
+            return
+        }
+        _isScanning.value = true
+        _lastBleError.value = null
+        runCatching {
+            bleScanner.startScan(
+                null,
+                ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
+                scanCallback
+            )
+        }.onFailure {
+            _lastBleError.value = it.message ?: "Unable to start BLE scan"
+            _isScanning.value = false
+            return
+        }
+        scope.launch {
+            delay(10_000L)
+            stopBleScan()
         }
     }
 
     fun startBleScan() = scanForNearbySensors()
 
+    fun stopBleScan() {
+        if (!hasScanPermission()) return
+        runCatching { scanner?.stopScan(scanCallback) }
+        _isScanning.value = false
+    }
+
     fun toggleSource(id: String) {
-        val current = _sources.value
-        _sources.value = current.map { src ->
-            if (src.id == id) src.copy(isConnected = !src.isConnected) else src
+        val source = _sources.value.firstOrNull { it.id == id } ?: return
+        if (source.type == DeviceSourceType.PHONE_GPS || source.type == DeviceSourceType.PHONE_STEP_COUNTER) {
+            _sources.value = _sources.value.map { if (it.id == id) it.copy(isConnected = !it.isConnected) else it }
+            return
         }
+        if (!source.isConnected) connect(source) else disconnect(id)
     }
 
     fun toggleSourceConnection(id: String) = toggleSource(id)
+
+    private fun connect(source: ConnectedSource) {
+        if (!hasConnectPermission()) {
+            _lastBleError.value = "Bluetooth connect permission required"
+            return
+        }
+        val device = runCatching { adapter?.getRemoteDevice(source.id.removePrefix("ble_")) }.getOrNull()
+        if (device == null) {
+            _lastBleError.value = "Bluetooth device unavailable"
+            return
+        }
+        val callback = object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                    gattConnections[source.id] = gatt
+                    _sources.value = _sources.value.map { if (it.id == source.id) it.copy(isConnected = true) else it }
+                    gatt.discoverServices()
+                } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                    gatt.close()
+                    gattConnections.remove(source.id)
+                    _sources.value = _sources.value.map { if (it.id == source.id) it.copy(isConnected = false) else it }
+                } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                    _lastBleError.value = "BLE connection failed ($status)"
+                }
+            }
+
+            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                if (status != BluetoothGatt.GATT_SUCCESS) return
+                val hrService = gatt.getService(HEART_RATE_SERVICE)
+                val hrCharacteristic = hrService?.getCharacteristic(HEART_RATE_MEASUREMENT)
+                if (hrCharacteristic != null && source.type == DeviceSourceType.BLE_HEART_RATE) {
+                    gatt.setCharacteristicNotification(hrCharacteristic, true)
+                    val descriptor = hrCharacteristic.getDescriptor(CLIENT_CONFIG)
+                    if (descriptor != null) {
+                        descriptor.value = android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        gatt.writeDescriptor(descriptor)
+                    }
+                }
+            }
+
+            override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+                if (characteristic.uuid == HEART_RATE_MEASUREMENT) {
+                    val flags = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0) ?: return
+                    val format = if ((flags and 0x01) == 0) BluetoothGattCharacteristic.FORMAT_UINT8 else BluetoothGattCharacteristic.FORMAT_UINT16
+                    val offset = 1
+                    val bpm = characteristic.getIntValue(format, offset) ?: return
+                    _heartRateBpm.value = bpm.coerceIn(20, 240)
+                }
+            }
+        }
+        runCatching { device.connectGatt(context, false, callback) }
+            .onFailure { _lastBleError.value = it.message ?: "Unable to connect" }
+    }
+
+    private fun disconnect(id: String) {
+        gattConnections.remove(id)?.let { gatt ->
+            runCatching { gatt.disconnect() }
+            runCatching { gatt.close() }
+        }
+        _sources.value = _sources.value.map { if (it.id == id) it.copy(isConnected = false) else it }
+    }
+
+    fun close() {
+        stopBleScan()
+        gattConnections.values.forEach { runCatching { it.disconnect() }; runCatching { it.close() } }
+        gattConnections.clear()
+    }
+
+    companion object {
+        val HEART_RATE_SERVICE: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
+        val HEART_RATE_MEASUREMENT: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
+        val CLIENT_CONFIG: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+    }
 }
