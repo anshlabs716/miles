@@ -49,6 +49,14 @@ enum class ColorVisionMode(val label: String, val description: String) {
     HIGH_CONTRAST("High Contrast Monochrome", "Ultra-high luminance pure black & white edges")
 }
 
+enum class PetType(val displayName: String, val emoji: String, val defaultName: String, val favoriteTreat: String) {
+    OFF("Keep Off", "🚫", "None", "None"),
+    DOG("Dog", "🐕", "Barkley", "Bone 🦴"),
+    CAT("Cat", "🐱", "Mochi", "Fish 🐟"),
+    PARROT("Parrot", "🦜", "Rio", "Seed 🌻"),
+    BUNNY("Bunny", "🐰", "Thumper", "Carrot 🥕")
+}
+
 data class AccessibilitySettings(
     val largerText: Boolean = false,
     val largerUi: Boolean = false,
@@ -152,7 +160,29 @@ data class UserPreferences(
     val vdotModel: String = "JACK_DANIELS",
     val trimpModel: String = "BANNISTER_EXPONENTIAL",
     val stepSensitivityThreshold: Float = 1.2f,
-    val barometerQnhHpa: Float = 1013.25f
+    val barometerQnhHpa: Float = 1013.25f,
+
+    // Virtual Fitness Companion Pet (Dog, Cat, Parrot, Bunny, or Off)
+    val petType: PetType = PetType.DOG,
+    val petName: String = "Barkley",
+
+    // Lazy Days (Cheat / Rest Days - max 2 to 3 per week)
+    val isTodayLazyDay: Boolean = false,
+    val lazyDaysThisWeek: Int = 0,
+    val maxLazyDaysPerWeek: Int = 3,
+    val lastLazyDayDate: String = "",
+
+    // Hardware Sensors & Tunneling Controls
+    val gpsSensorEnabled: Boolean = true,
+    val stepSensorHardwareEnabled: Boolean = true,
+    val bluetoothTunnelingEnabled: Boolean = true,
+    val heartRateSensorEnabled: Boolean = true,
+    val sensorRefreshRateMs: Long = 1000L,
+
+    // Custom Get Up & Move Idle Reminders
+    val moveReminderEnabled: Boolean = true,
+    val moveReminderIntervalMinutes: Int = 45,
+    val moveReminderCustomText: String = "Time to stretch and get moving! Take 250 steps."
 )
 
 class MilesPreferences(context: Context) {
@@ -279,7 +309,25 @@ class MilesPreferences(context: Context) {
             vdotModel = prefs.getString("vdot_model", "JACK_DANIELS") ?: "JACK_DANIELS",
             trimpModel = prefs.getString("trimp_model", "BANNISTER_EXPONENTIAL") ?: "BANNISTER_EXPONENTIAL",
             stepSensitivityThreshold = prefs.getFloat("step_sens", 1.2f),
-            barometerQnhHpa = prefs.getFloat("baro_qnh", 1013.25f)
+            barometerQnhHpa = prefs.getFloat("baro_qnh", 1013.25f),
+
+            petType = runCatching { PetType.valueOf(prefs.getString("pet_type", PetType.DOG.name) ?: PetType.DOG.name) }.getOrDefault(PetType.DOG),
+            petName = prefs.getString("pet_name", "Barkley") ?: "Barkley",
+
+            isTodayLazyDay = prefs.getBoolean("is_today_lazy", false),
+            lazyDaysThisWeek = prefs.getInt("lazy_days_week", 0),
+            maxLazyDaysPerWeek = prefs.getInt("max_lazy_days", 3),
+            lastLazyDayDate = prefs.getString("last_lazy_date", "") ?: "",
+
+            gpsSensorEnabled = prefs.getBoolean("gps_sensor_en", true),
+            stepSensorHardwareEnabled = prefs.getBoolean("step_sensor_hw_en", true),
+            bluetoothTunnelingEnabled = prefs.getBoolean("bt_tunnel_en", true),
+            heartRateSensorEnabled = prefs.getBoolean("hr_sensor_en", true),
+            sensorRefreshRateMs = prefs.getLong("sensor_refresh_ms", 1000L),
+
+            moveReminderEnabled = prefs.getBoolean("move_rem_en", true),
+            moveReminderIntervalMinutes = prefs.getInt("move_rem_int", 45),
+            moveReminderCustomText = prefs.getString("move_rem_text", "Time to stretch and get moving! Take 250 steps.") ?: "Time to stretch and get moving! Take 250 steps."
         )
     }
 
@@ -470,8 +518,101 @@ class MilesPreferences(context: Context) {
             .putString("trimp_model", updated.trimpModel)
             .putFloat("step_sens", updated.stepSensitivityThreshold)
             .putFloat("baro_qnh", updated.barometerQnhHpa)
+            .putString("pet_type", updated.petType.name)
+            .putString("pet_name", updated.petName)
+            .putBoolean("is_today_lazy", updated.isTodayLazyDay)
+            .putInt("lazy_days_week", updated.lazyDaysThisWeek)
+            .putInt("max_lazy_days", updated.maxLazyDaysPerWeek)
+            .putString("last_lazy_date", updated.lastLazyDayDate)
+            .putBoolean("gps_sensor_en", updated.gpsSensorEnabled)
+            .putBoolean("step_sensor_hw_en", updated.stepSensorHardwareEnabled)
+            .putBoolean("bt_tunnel_en", updated.bluetoothTunnelingEnabled)
+            .putBoolean("hr_sensor_en", updated.heartRateSensorEnabled)
+            .putLong("sensor_refresh_ms", updated.sensorRefreshRateMs)
+            .putBoolean("move_rem_en", updated.moveReminderEnabled)
+            .putInt("move_rem_int", updated.moveReminderIntervalMinutes)
+            .putString("move_rem_text", updated.moveReminderCustomText)
             .apply()
         _userPreferences.value = updated
+    }
+
+    fun toggleLazyDay(): Boolean {
+        val current = _userPreferences.value
+        if (!current.isTodayLazyDay && current.lazyDaysThisWeek >= current.maxLazyDaysPerWeek) {
+            return false // Limit reached
+        }
+        val nextIsLazy = !current.isTodayLazyDay
+        val nextUsed = if (nextIsLazy) current.lazyDaysThisWeek + 1 else (current.lazyDaysThisWeek - 1).coerceAtLeast(0)
+        prefs.edit()
+            .putBoolean("is_today_lazy", nextIsLazy)
+            .putInt("lazy_days_week", nextUsed)
+            .apply()
+        _userPreferences.value = current.copy(
+            isTodayLazyDay = nextIsLazy,
+            lazyDaysThisWeek = nextUsed
+        )
+        return true
+    }
+
+    fun setPet(type: PetType, name: String? = null) {
+        val chosenName = name ?: if (type != PetType.OFF) type.defaultName else "None"
+        prefs.edit()
+            .putString("pet_type", type.name)
+            .putString("pet_name", chosenName)
+            .apply()
+        _userPreferences.value = _userPreferences.value.copy(
+            petType = type,
+            petName = chosenName
+        )
+    }
+
+    fun setSensorHardwareControls(
+        gpsEnabled: Boolean? = null,
+        stepHwEnabled: Boolean? = null,
+        btTunnelEnabled: Boolean? = null,
+        hrEnabled: Boolean? = null,
+        refreshRateMs: Long? = null
+    ) {
+        val cur = _userPreferences.value
+        val newGps = gpsEnabled ?: cur.gpsSensorEnabled
+        val newStep = stepHwEnabled ?: cur.stepSensorHardwareEnabled
+        val newBt = btTunnelEnabled ?: cur.bluetoothTunnelingEnabled
+        val newHr = hrEnabled ?: cur.heartRateSensorEnabled
+        val newRefresh = refreshRateMs ?: cur.sensorRefreshRateMs
+
+        prefs.edit()
+            .putBoolean("gps_sensor_en", newGps)
+            .putBoolean("step_sensor_hw_en", newStep)
+            .putBoolean("bt_tunnel_en", newBt)
+            .putBoolean("hr_sensor_en", newHr)
+            .putLong("sensor_refresh_ms", newRefresh)
+            .apply()
+
+        _userPreferences.value = cur.copy(
+            gpsSensorEnabled = newGps,
+            stepSensorHardwareEnabled = newStep,
+            bluetoothTunnelingEnabled = newBt,
+            heartRateSensorEnabled = newHr,
+            sensorRefreshRateMs = newRefresh
+        )
+    }
+
+    fun setMoveReminderSettings(
+        enabled: Boolean,
+        intervalMinutes: Int = 45,
+        customMessage: String = "Time to stretch and get moving! Take 250 steps."
+    ) {
+        prefs.edit()
+            .putBoolean("move_rem_en", enabled)
+            .putInt("move_rem_int", intervalMinutes)
+            .putString("move_rem_text", customMessage)
+            .apply()
+
+        _userPreferences.value = _userPreferences.value.copy(
+            moveReminderEnabled = enabled,
+            moveReminderIntervalMinutes = intervalMinutes,
+            moveReminderCustomText = customMessage
+        )
     }
 
     fun updateAccessibility(transform: (AccessibilitySettings) -> AccessibilitySettings) {

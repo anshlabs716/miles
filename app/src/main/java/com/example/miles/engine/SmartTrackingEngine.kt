@@ -5,7 +5,9 @@ import android.content.SharedPreferences
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.model.GpsPoint
+import com.example.miles.data.model.SavedRouteEntity
 import com.example.miles.data.model.Waypoint
+import com.example.miles.data.model.WorkoutInterval
 import com.example.miles.data.repository.MilesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +24,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -57,7 +60,28 @@ data class LiveWorkoutStats(
     val ghostDeltaDistanceM: Double? = null,
     val isSimulationActive: Boolean = false,
     val tickIntervalMs: Long = 100L,
-    val telemetryIntervalMs: Long = 3000L
+    val telemetryIntervalMs: Long = 3000L,
+
+    // Route Navigation
+    val activeNavRoute: SavedRouteEntity? = null,
+    val navTargetPoints: List<GpsPoint> = emptyList(),
+    val navNextPointIndex: Int = 0,
+    val navDistanceToNextM: Double = 0.0,
+    val navNextWaypointName: String = "",
+    val navBearingDeg: Float = 0f,
+    val navCrossTrackErrorM: Double = 0.0,
+    val navIsOffRoute: Boolean = false,
+    val navRemainingDistanceM: Double = 0.0,
+    val navProgressPercent: Float = 0f,
+
+    // Progressive Interval Workout
+    val activeIntervalPlanName: String? = null,
+    val intervalIndex: Int = 0,
+    val totalIntervals: Int = 0,
+    val currentIntervalLabel: String = "",
+    val currentIntervalType: String = "",
+    val currentIntervalRemainingSeconds: Int = 0,
+    val currentIntervalTotalSeconds: Int = 0
 ) {
     val elapsedSeconds: Long get() = elapsedMillis / 1000L
 }
@@ -66,6 +90,8 @@ sealed class TrackingEvent {
     data class MilestoneReached(val title: String, val message: String) : TrackingEvent()
     data class AutoPauseTriggered(val isPaused: Boolean) : TrackingEvent()
     data class AnomalyDetected(val message: String) : TrackingEvent()
+    data class IntervalChanged(val title: String, val instruction: String) : TrackingEvent()
+    data class NavigationAlert(val message: String, val isWarning: Boolean = false) : TrackingEvent()
 }
 
 class SmartTrackingEngine(
@@ -285,17 +311,115 @@ class SmartTrackingEngine(
         appendValidatedPoint(validPoint)
     }
 
+    // Active Route Navigation state
+    private var activeNavRouteEntity: SavedRouteEntity? = null
+    private var targetNavPoints: List<GpsPoint> = emptyList()
+    private var targetNavWaypoints: List<Waypoint> = emptyList()
+
+    // Active Interval Workout state
+    private var activeIntervals: List<WorkoutInterval> = emptyList()
+    private var currentIntervalIdx: Int = 0
+    private var currentIntervalRemainingSec: Int = 0
+    private var lastIntervalSecondTick: Long = 0L
+
+    fun setNavigationRoute(route: SavedRouteEntity?) {
+        activeNavRouteEntity = route
+        if (route == null) {
+            targetNavPoints = emptyList()
+            targetNavWaypoints = emptyList()
+            _liveStats.value = _liveStats.value.copy(
+                activeNavRoute = null,
+                navTargetPoints = emptyList(),
+                navDistanceToNextM = 0.0,
+                navNextWaypointName = "",
+                navBearingDeg = 0f,
+                navCrossTrackErrorM = 0.0,
+                navIsOffRoute = false,
+                navRemainingDistanceM = 0.0,
+                navProgressPercent = 0f
+            )
+            return
+        }
+
+        val points = MilesRepository.parsePoints(route.routePointsJson)
+        val waypoints = MilesRepository.parseWaypoints(route.waypointsJson)
+        targetNavPoints = points
+        targetNavWaypoints = waypoints
+
+        _liveStats.value = _liveStats.value.copy(
+            activeNavRoute = route,
+            navTargetPoints = points,
+            navRemainingDistanceM = route.distanceMeters,
+            navNextWaypointName = waypoints.firstOrNull()?.name ?: "Waypoint 1",
+            navProgressPercent = 0f
+        )
+        _events.tryEmit(TrackingEvent.NavigationAlert("Started navigation on ${route.name}"))
+    }
+
+    fun stopNavigation() {
+        setNavigationRoute(null)
+    }
+
+    fun startIntervalWorkout(
+        planTitle: String,
+        intervals: List<WorkoutInterval>,
+        activityType: ActivityType = ActivityType.RUNNING
+    ) {
+        if (intervals.isEmpty()) return
+        activeIntervals = intervals
+        currentIntervalIdx = 0
+        val first = intervals.first()
+        currentIntervalRemainingSec = first.durationSeconds
+        lastIntervalSecondTick = System.currentTimeMillis()
+
+        if (_liveStats.value.state != TrackingState.RECORDING) {
+            startTracking(activityType)
+        }
+
+        _liveStats.value = _liveStats.value.copy(
+            activeIntervalPlanName = planTitle,
+            intervalIndex = 0,
+            totalIntervals = intervals.size,
+            currentIntervalLabel = first.instruction.ifBlank { "${first.type.label} (${first.durationSeconds / 60}m)" },
+            currentIntervalType = first.type.name,
+            currentIntervalRemainingSeconds = first.durationSeconds,
+            currentIntervalTotalSeconds = first.durationSeconds
+        )
+
+        _events.tryEmit(TrackingEvent.IntervalChanged(first.type.label, first.instruction))
+    }
+
     private fun appendValidatedPoint(point: GpsPoint) {
         val current = _liveStats.value
         val newPoints = current.points + point
 
-        var totalDist = 0.0
+        var totalDist = current.distanceMeters
         var addedElevGain = 0.0
         var addedElevLoss = 0.0
 
         if (current.points.isNotEmpty()) {
             val last = current.points.last()
             val legDist = MilesRepository.calculateDistanceMeters(last.latitude, last.longitude, point.latitude, point.longitude)
+
+            // Stationary noise & GPS drift deadband filter:
+            // 1. If GPS accuracy is poor (> 20m), do NOT accumulate distance or track jitter
+            // 2. If user speed is < 0.5 m/s (~1.8 km/h) and leg movement is < 3.0m, ignore as indoor/stationary wander
+            // 3. Minimum movement deadband of 1.5m
+            val isStationaryNoise = (point.accuracy > 20.0f) ||
+                    (point.speed < 0.5f && legDist < 3.0) ||
+                    (legDist < 1.5)
+
+            if (isStationaryNoise) {
+                // User is not actually moving: do not add drift distance, zero out instantaneous speed
+                _liveStats.value = current.copy(
+                    gpsAccuracyMeters = point.accuracy,
+                    currentElevationM = point.altitude,
+                    currentSpeedKmh = 0.0,
+                    currentPaceSecPerKm = 0.0
+                )
+                return
+            }
+
             totalDist = current.distanceMeters + legDist
 
             val elevDiff = point.altitude - last.altitude
@@ -325,6 +449,77 @@ class SmartTrackingEngine(
             _events.tryEmit(TrackingEvent.MilestoneReached("Milestone: $currentKm km", "Pace: $paceStr/km • Time: ${formatDuration(elapsed)}"))
         }
 
+        // Route Navigation Calculations
+        var navCrossTrackError = current.navCrossTrackErrorM
+        var navIsOffRoute = current.navIsOffRoute
+        var navDistToNext = current.navDistanceToNextM
+        var navBearing = current.navBearingDeg
+        var navRemainingDist = current.navRemainingDistanceM
+        var navProgress = current.navProgressPercent
+        var navNextWpName = current.navNextWaypointName
+
+        if (targetNavPoints.isNotEmpty()) {
+            // Find closest point on planned route
+            var closestIdx = 0
+            var minDist = Double.MAX_VALUE
+            for (i in targetNavPoints.indices) {
+                val d = MilesRepository.calculateDistanceMeters(
+                    point.latitude, point.longitude,
+                    targetNavPoints[i].latitude, targetNavPoints[i].longitude
+                )
+                if (d < minDist) {
+                    minDist = d
+                    closestIdx = i
+                }
+            }
+
+            navCrossTrackError = minDist
+            val wasOffRoute = navIsOffRoute
+            navIsOffRoute = minDist > 35.0 // More than 35m off path
+
+            if (navIsOffRoute && !wasOffRoute) {
+                _events.tryEmit(TrackingEvent.NavigationAlert("⚠️ Off-Route (${minDist.toInt()}m from path) - Return to route!", true))
+            } else if (!navIsOffRoute && wasOffRoute) {
+                _events.tryEmit(TrackingEvent.NavigationAlert("Back on track! ✓"))
+            }
+
+            val nextIdx = (closestIdx + 1).coerceAtMost(targetNavPoints.size - 1)
+            val nextTargetPoint = targetNavPoints[nextIdx]
+            navDistToNext = MilesRepository.calculateDistanceMeters(
+                point.latitude, point.longitude,
+                nextTargetPoint.latitude, nextTargetPoint.longitude
+            )
+
+            // Bearing from current position to next route point
+            val lat1 = Math.toRadians(point.latitude)
+            val lon1 = Math.toRadians(point.longitude)
+            val lat2 = Math.toRadians(nextTargetPoint.latitude)
+            val lon2 = Math.toRadians(nextTargetPoint.longitude)
+            val dLon = lon2 - lon1
+            val y = sin(dLon) * cos(lat2)
+            val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+            val brng = (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
+            navBearing = brng.toFloat()
+
+            // Calculate remaining distance along route from closest point to end
+            var rem = 0.0
+            for (i in closestIdx until targetNavPoints.size - 1) {
+                rem += MilesRepository.calculateDistanceMeters(
+                    targetNavPoints[i].latitude, targetNavPoints[i].longitude,
+                    targetNavPoints[i + 1].latitude, targetNavPoints[i + 1].longitude
+                )
+            }
+            navRemainingDist = rem
+            val totalRouteDist = activeNavRouteEntity?.distanceMeters ?: (rem + totalDist).coerceAtLeast(1.0)
+            navProgress = ((totalRouteDist - rem) / totalRouteDist).toFloat().coerceIn(0f, 1f)
+
+            // Named waypoints if present
+            val nextWp = targetNavWaypoints.firstOrNull { wp ->
+                MilesRepository.calculateDistanceMeters(point.latitude, point.longitude, wp.latitude, wp.longitude) > 20.0
+            }
+            if (nextWp != null) navNextWpName = nextWp.name
+        }
+
         _liveStats.value = current.copy(
             distanceMeters = totalDist,
             currentPaceSecPerKm = currentPaceSec,
@@ -337,7 +532,14 @@ class SmartTrackingEngine(
             stepCount = estimatedSteps,
             calories = calories,
             points = newPoints,
-            gpsAccuracyMeters = point.accuracy
+            gpsAccuracyMeters = point.accuracy,
+            navCrossTrackErrorM = navCrossTrackError,
+            navIsOffRoute = navIsOffRoute,
+            navDistanceToNextM = navDistToNext,
+            navBearingDeg = navBearing,
+            navRemainingDistanceM = navRemainingDist,
+            navProgressPercent = navProgress,
+            navNextWaypointName = navNextWpName
         )
     }
 
@@ -356,6 +558,35 @@ class SmartTrackingEngine(
                         (elapsedSec / targetPaceSecPerKm) * 1000.0
                     } else 0.0
                     val ghostDelta = dist - ghostExpectedDistM
+
+                    // Interval workout progression tick (once per second)
+                    if (activeIntervals.isNotEmpty() && now - lastIntervalSecondTick >= 1000L) {
+                        lastIntervalSecondTick = now
+                        if (currentIntervalRemainingSec > 1) {
+                            currentIntervalRemainingSec--
+                            _liveStats.value = _liveStats.value.copy(
+                                currentIntervalRemainingSeconds = currentIntervalRemainingSec
+                            )
+                        } else {
+                            // Advance to next interval
+                            if (currentIntervalIdx < activeIntervals.size - 1) {
+                                currentIntervalIdx++
+                                val next = activeIntervals[currentIntervalIdx]
+                                currentIntervalRemainingSec = next.durationSeconds
+                                _liveStats.value = _liveStats.value.copy(
+                                    intervalIndex = currentIntervalIdx,
+                                    currentIntervalLabel = next.instruction.ifBlank { "${next.type.label} (${next.durationSeconds / 60}m)" },
+                                    currentIntervalType = next.type.name,
+                                    currentIntervalRemainingSeconds = next.durationSeconds,
+                                    currentIntervalTotalSeconds = next.durationSeconds
+                                )
+                                _events.tryEmit(TrackingEvent.IntervalChanged(next.type.label, next.instruction))
+                            } else {
+                                // Workout complete
+                                _events.tryEmit(TrackingEvent.MilestoneReached("Interval Workout Complete! 🎉", "Great job finishing your structured session!"))
+                            }
+                        }
+                    }
 
                     _liveStats.value = _liveStats.value.copy(
                         elapsedMillis = calculatedMillis,

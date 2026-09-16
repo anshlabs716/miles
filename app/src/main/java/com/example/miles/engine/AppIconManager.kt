@@ -14,74 +14,71 @@ class AppIconManager(private val context: Context) {
         get() = context.packageManager
 
     /**
-     * Finds the real declared component. The AI Studio project uses an
-     * applicationId different from its Kotlin/manifest namespace, so simply
-     * concatenating context.packageName with the alias class is not reliable.
+     * Resolves the exact ComponentName recognized by Android PackageManager.
+     * Checks all candidate package/class combinations.
      */
-    private fun resolveComponentName(option: AppIconOption): ComponentName {
+    fun resolveComponentName(option: AppIconOption): ComponentName {
         val simpleName = option.aliasClass.substringAfterLast('.')
         val candidates = listOf(
+            ComponentName(context.packageName, "com.example.$simpleName"),
+            ComponentName(context.packageName, "${context.packageName}.$simpleName"),
             ComponentName(context.packageName, option.aliasClass),
-            ComponentName(context.packageName, "${context.packageName}.$simpleName")
+            ComponentName(context, option.aliasClass)
         )
-        for (candidate in candidates) {
+        for (cand in candidates) {
             val exists = runCatching {
-                // Must pass MATCH_DISABLED_COMPONENTS so disabled aliases are recognized
-                packageManager.getActivityInfo(candidate, PackageManager.MATCH_DISABLED_COMPONENTS)
-                true
-            }.getOrElse {
-                runCatching {
-                    // Fallback check using getComponentEnabledSetting
-                    packageManager.getComponentEnabledSetting(candidate) >= 0
-                }.getOrDefault(false)
-            }
-            if (exists) return candidate
+                val state = packageManager.getComponentEnabledSetting(cand)
+                state >= 0 // Valid Android component state (0=default, 1=enabled, 2=disabled)
+            }.getOrDefault(false)
+            if (exists) return cand
         }
         return candidates.first()
     }
 
-    /** Enables exactly one icon alias and disables every other icon alias. */
+    /**
+     * Enables exactly one icon alias and disables all other icon aliases.
+     * CRITICAL: Enables the target alias FIRST before disabling others so
+     * the launcher never observes 0 active launcher components.
+     */
     fun setAppIcon(option: AppIconOption): Boolean {
-        var targetEnabled = false
+        val targetComponent = resolveComponentName(option)
+        var targetSuccess = false
+
+        // 1. Enable target component FIRST
+        runCatching {
+            packageManager.setComponentEnabledSetting(
+                targetComponent,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            targetSuccess = true
+            Log.d(TAG, "Successfully enabled target launcher component: ${targetComponent.className}")
+        }.onFailure { error ->
+            Log.e(TAG, "Failed to enable target component: ${targetComponent.className}", error)
+        }
+
+        // 2. Disable all other launcher components
         AppIconOption.entries.forEach { icon ->
-            val component = resolveComponentName(icon)
-            val isTarget = (icon == option)
-            val desiredState = if (isTarget) {
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            } else {
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            }
-            runCatching {
-                packageManager.setComponentEnabledSetting(
-                    component,
-                    desiredState,
-                    PackageManager.DONT_KILL_APP
-                )
-                if (isTarget) targetEnabled = true
-            }.onFailure { error ->
-                // Try alternate candidate package name in case namespace differs
-                val altComponent = ComponentName(
-                    context.packageName,
-                    "${context.packageName}.${icon.aliasClass.substringAfterLast('.')}"
-                )
+            if (icon != option) {
+                val otherComponent = resolveComponentName(icon)
                 runCatching {
                     packageManager.setComponentEnabledSetting(
-                        altComponent,
-                        desiredState,
+                        otherComponent,
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                         PackageManager.DONT_KILL_APP
                     )
-                    if (isTarget) targetEnabled = true
-                }.onFailure { innerError ->
-                    Log.e(TAG, "Could not update ${component.className}", innerError)
+                }.onFailure { error ->
+                    Log.w(TAG, "Could not disable component: ${otherComponent.className}", error)
                 }
             }
         }
-        return targetEnabled
+
+        return targetSuccess
     }
 
     /** Reads the launcher state directly from PackageManager. */
     fun getActiveAppIcon(): AppIconOption {
-        AppIconOption.entries.forEach { icon ->
+        for (icon in AppIconOption.entries) {
             val component = resolveComponentName(icon)
             val state = runCatching {
                 packageManager.getComponentEnabledSetting(component)

@@ -57,20 +57,40 @@ class LocationTracker(private val context: Context) {
         return fine || coarse
     }
 
-    fun startTracking(onUpdate: ((GpsPoint) -> Unit)? = null) {
+    private var lastProcessedTime: Long = 0L
+    private var currentIntervalMs: Long = 1000L
+
+    fun startTracking(
+        intervalMs: Long = 1000L,
+        gpsEnabled: Boolean = true,
+        onUpdate: ((GpsPoint) -> Unit)? = null
+    ) {
         this.onLocationUpdate = onUpdate
+        this.currentIntervalMs = intervalMs.coerceIn(100L, 10000L)
+
+        if (!gpsEnabled) {
+            Log.i("LocationTracker", "GPS tracking turned OFF by user setting.")
+            stopTracking()
+            return
+        }
+
         if (!hasLocationPermission()) {
             Log.w("LocationTracker", "Cannot start location tracking: permission not granted")
             return
         }
+        if (_isTrackingLocation.value && locationCallback != null) {
+            // Already tracking with an active callback; avoid duplicate listener registration
+            return
+        }
 
         try {
+            // Remove any previous listener before registering a new one
+            locationCallback?.let { fusedClient.removeLocationUpdates(it) }
             // First fetch immediate last known location
             fusedClient.lastLocation.addOnSuccessListener { loc ->
                 if (loc != null) {
                     handleNewLocation(loc)
                 } else {
-                    // Try system location manager last known
                     val lastGps = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                     val lastNet = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
                     val bestLast = lastGps ?: lastNet
@@ -78,10 +98,10 @@ class LocationTracker(private val context: Context) {
                 }
             }
 
-            // Continuous high-precision fused location updates (1000ms interval)
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
-                .setMinUpdateIntervalMillis(500L)
-                .setMinUpdateDistanceMeters(0.5f)
+            // High-precision fused location updates with user-configured refresh speed
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, currentIntervalMs)
+                .setMinUpdateIntervalMillis(currentIntervalMs / 2)
+                .setMinUpdateDistanceMeters(0.8f)
                 .build()
 
             val cb = object : LocationCallback() {
@@ -92,25 +112,28 @@ class LocationTracker(private val context: Context) {
             locationCallback = cb
 
             fusedClient.requestLocationUpdates(request, cb, Looper.getMainLooper())
-
-            // Also register Android LocationManager as backup provider
-            locationManager?.let { lm ->
-                if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    lm.requestLocationUpdates(
-                        LocationManager.GPS_PROVIDER,
-                        1000L,
-                        0.5f,
-                        systemLocationListener,
-                        Looper.getMainLooper()
-                    )
-                }
-            }
-
             _isTrackingLocation.value = true
         } catch (e: SecurityException) {
             Log.e("LocationTracker", "SecurityException requesting location: ${e.message}")
         } catch (e: Exception) {
-            Log.e("LocationTracker", "Error requesting location: ${e.message}")
+            Log.e("LocationTracker", "Error requesting location from fused provider, falling back to LocationManager: ${e.message}")
+            try {
+                // Fallback to system LocationManager only if FusedClient fails
+                locationManager?.let { lm ->
+                    if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                        lm.requestLocationUpdates(
+                            LocationManager.GPS_PROVIDER,
+                            currentIntervalMs,
+                            0.8f,
+                            systemLocationListener,
+                            Looper.getMainLooper()
+                        )
+                        _isTrackingLocation.value = true
+                    }
+                }
+            } catch (fallbackEx: Exception) {
+                Log.e("LocationTracker", "Fallback LocationManager failed: ${fallbackEx.message}")
+            }
         }
     }
 
@@ -127,6 +150,14 @@ class LocationTracker(private val context: Context) {
     }
 
     private fun handleNewLocation(loc: Location) {
+        val now = System.currentTimeMillis()
+        // Deduplicate rapid bursts based on user configured refresh interval
+        val minThreshold = (currentIntervalMs * 0.85).toLong().coerceAtLeast(100L)
+        if (now - lastProcessedTime < minThreshold) {
+            return
+        }
+        lastProcessedTime = now
+
         val point = GpsPoint(
             latitude = loc.latitude,
             longitude = loc.longitude,
@@ -134,7 +165,7 @@ class LocationTracker(private val context: Context) {
             accuracy = loc.accuracy,
             speed = loc.speed,
             bearing = loc.bearing,
-            timestamp = loc.time
+            timestamp = if (loc.time > 0) loc.time else now
         )
         _currentLocation.value = point
         onLocationUpdate?.invoke(point)

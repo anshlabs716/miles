@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.NordicWalking
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,7 +65,8 @@ enum class SmartCollectionFilter(val label: String) {
 @Composable
 fun HistoryScreen(
     activities: List<ActivityEntity>,
-    onSelectActivity: (ActivityEntity) -> Unit
+    onSelectActivity: (ActivityEntity) -> Unit,
+    onToggleFavorite: ((ActivityEntity) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCollection by remember { mutableStateOf(SmartCollectionFilter.ALL) }
@@ -200,7 +202,8 @@ fun HistoryScreen(
             items(filteredActivities) { act ->
                 HistoryActivityItem(
                     activity = act,
-                    onClick = { onSelectActivity(act) }
+                    onClick = { onSelectActivity(act) },
+                    onToggleFavorite = { onToggleFavorite?.invoke(act) }
                 )
             }
         }
@@ -214,7 +217,8 @@ fun HistoryScreen(
 @Composable
 fun HistoryActivityItem(
     activity: ActivityEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onToggleFavorite: (() -> Unit)? = null
 ) {
     LiquidGlassCard(
         modifier = Modifier
@@ -227,7 +231,10 @@ fun HistoryActivityItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     val icon = when (ActivityType.fromString(activity.activityType)) {
                         ActivityType.RUNNING -> Icons.AutoMirrored.Filled.DirectionsRun
                         ActivityType.CYCLING -> Icons.Default.DirectionsBike
@@ -262,12 +269,15 @@ fun HistoryActivityItem(
                     }
                 }
 
-                if (activity.isFavorite) {
+                IconButton(
+                    onClick = { onToggleFavorite?.invoke() },
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Favorite",
-                        tint = Color(0xFFFFB300),
-                        modifier = Modifier.size(20.dp)
+                        imageVector = if (activity.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = if (activity.isFavorite) "Favorite" else "Not favorite",
+                        tint = if (activity.isFavorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }

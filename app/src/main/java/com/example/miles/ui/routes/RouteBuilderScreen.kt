@@ -26,6 +26,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -71,13 +74,15 @@ import java.util.UUID
 
 @Composable
 fun RouteBuilderScreen(
-    repository: MilesRepository
+    repository: MilesRepository,
+    onStartNavigation: ((SavedRouteEntity) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val savedRoutes by repository.savedRoutes.collectAsState(initial = emptyList())
 
     var selectedTabIndex by remember { mutableStateOf(0) } // 0: Route Builder, 1: Route Library
+    var libraryFavoritesOnly by remember { mutableStateOf(false) }
 
     // Builder state
     var builderPoints by remember { mutableStateOf<List<GpsPoint>>(emptyList()) }
@@ -312,74 +317,143 @@ fun RouteBuilderScreen(
             Spacer(modifier = Modifier.height(16.dp))
         } else {
             // ROUTE LIBRARY VIEW
-            if (savedRoutes.isEmpty()) {
-                LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Bookmark,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "No saved routes yet",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Use the Route Builder to plot custom running/cycling paths.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(savedRoutes) { route ->
-                        LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = route.name,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "${(route.distanceMeters / 1000.0).format(2)} km • ${route.description}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+            val displayedRoutes = if (libraryFavoritesOnly) savedRoutes.filter { it.isFavorite } else savedRoutes
 
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        repository.deleteRoute(route.id)
-                                        Toast.makeText(context, "Route deleted", Toast.LENGTH_SHORT).show()
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Filter Chips
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = !libraryFavoritesOnly,
+                        onClick = { libraryFavoritesOnly = false },
+                        label = { Text("All Routes (${savedRoutes.size})") }
+                    )
+                    FilterChip(
+                        selected = libraryFavoritesOnly,
+                        onClick = { libraryFavoritesOnly = true },
+                        label = { Text("Favorites ★ (${savedRoutes.count { it.isFavorite }})") }
+                    )
+                }
+
+                if (displayedRoutes.isEmpty()) {
+                    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = if (libraryFavoritesOnly) Icons.Default.Star else Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (libraryFavoritesOnly) "No favorite routes yet" else "No saved routes yet",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (libraryFavoritesOnly) "Tap the star on any route to mark as favorite." else "Use the Route Builder to plot custom running/cycling paths.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(displayedRoutes) { route ->
+                            LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = route.name,
+                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "${(route.distanceMeters / 1000.0).format(2)} km" + if (route.description.isNotBlank()) " • ${route.description}" else "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        // Favorite toggle button
+                                        IconButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    val isFav = repository.toggleRouteFavorite(route.id)
+                                                    Toast.makeText(
+                                                        context,
+                                                        if (isFav) "Added to favorites ★" else "Removed from favorites",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (route.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                                contentDescription = "Favorite",
+                                                tint = if (route.isFavorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    repository.deleteRoute(route.id)
+                                                    Toast.makeText(context, "Route deleted", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFFF2D55), modifier = Modifier.size(20.dp))
+                                        }
                                     }
-                                }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFFF2D55))
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Action bar with Start Navigation button
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        Button(
+                                            onClick = {
+                                                onStartNavigation?.invoke(route)
+                                                Toast.makeText(context, "Starting navigation on ${route.name}", Toast.LENGTH_SHORT).show()
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.height(36.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+                                        ) {
+                                            Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Start Navigation", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
     }
 
     // Save Route Dialog
@@ -434,4 +508,5 @@ fun RouteBuilderScreen(
             }
         )
     }
+}
 }

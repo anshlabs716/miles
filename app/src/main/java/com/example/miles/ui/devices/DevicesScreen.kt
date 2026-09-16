@@ -66,10 +66,19 @@ import com.example.miles.ui.theme.LiquidGlassPanel
 import com.example.miles.wear.WearCompanionManager
 import com.example.miles.wear.WearConnectionStatus
 
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.OutlinedTextField
+import com.example.miles.data.local.MilesPreferences
+import com.example.miles.engine.MoveReminderManager
+
 @Composable
 fun DevicesScreen(
     deviceManager: DeviceManager,
-    wearCompanion: WearCompanionManager
+    wearCompanion: WearCompanionManager,
+    preferences: MilesPreferences? = null,
+    moveReminderManager: MoveReminderManager? = null
 ) {
     val context = LocalContext.current
     val sources by deviceManager.sources.collectAsState()
@@ -79,7 +88,12 @@ fun DevicesScreen(
     val watchSettings by wearCompanion.watchSettings.collectAsState()
     val wearLogs by wearCompanion.communicationLogs.collectAsState()
 
+    val userPrefs by preferences?.userPreferences?.collectAsState() ?: remember { mutableStateOf(null) }
+
     var selectedTab by remember { mutableStateOf(0) } // 0: Sensors & Hardware, 1: Wear OS Companion
+    var reminderMessageText by remember(userPrefs?.moveReminderCustomText) {
+        mutableStateOf(userPrefs?.moveReminderCustomText ?: "Time to stretch and get moving! Take 250 steps.")
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -175,8 +189,276 @@ fun DevicesScreen(
                     }
                 }
             }
+
+            // Granular Hardware & Tunneling Controls
+            if (userPrefs != null && preferences != null) {
+                item {
+                    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(18.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Sensors,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "HARDWARE & TUNNELING SWITCHES",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            SettingToggleRow(
+                                title = "GPS Positioning Sensor",
+                                subtitle = "Enables high-precision satellite GNSS location acquisition",
+                                checked = userPrefs!!.gpsSensorEnabled,
+                                onCheckedChange = { checked ->
+                                    preferences.setSensorHardwareControls(gpsEnabled = checked)
+                                    Toast.makeText(context, if (checked) "GPS Sensor ON" else "GPS Sensor OFF", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+
+                            SettingToggleRow(
+                                title = "Step Counter & Motion Sensor",
+                                subtitle = "Hardware step detector and physical motion accelerometer",
+                                checked = userPrefs!!.stepSensorHardwareEnabled,
+                                onCheckedChange = { checked ->
+                                    preferences.setSensorHardwareControls(stepHwEnabled = checked)
+                                    Toast.makeText(context, if (checked) "Step Sensor ON" else "Step Sensor OFF", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+
+                            SettingToggleRow(
+                                title = "Bluetooth Sensor Tunneling",
+                                subtitle = "Allow external BLE heart rate and cadence tunneling to engine",
+                                checked = userPrefs!!.bluetoothTunnelingEnabled,
+                                onCheckedChange = { checked ->
+                                    preferences.setSensorHardwareControls(btTunnelEnabled = checked)
+                                    Toast.makeText(context, if (checked) "BLE Tunneling ON" else "BLE Tunneling OFF", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+
+                            SettingToggleRow(
+                                title = "Heart Rate Monitor Source",
+                                subtitle = "Listen to optical PPG and BLE chest strap heart rate",
+                                checked = userPrefs!!.heartRateSensorEnabled,
+                                onCheckedChange = { checked ->
+                                    preferences.setSensorHardwareControls(hrEnabled = checked)
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Refresh speed selector
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Speed,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Sensor Refresh Speed",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Controls GNSS & sensor sampling rate (${userPrefs!!.sensorRefreshRateMs}ms / ${1000.0 / userPrefs!!.sensorRefreshRateMs} Hz)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val speeds = listOf(
+                                100L to "100ms (10Hz)",
+                                250L to "250ms (4Hz)",
+                                500L to "500ms (2Hz)",
+                                1000L to "1s (1Hz)",
+                                2000L to "2s (0.5Hz)",
+                                5000L to "5s (Eco)"
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                speeds.take(3).forEach { (ms, label) ->
+                                    val selected = userPrefs!!.sensorRefreshRateMs == ms
+                                    FilledTonalButton(
+                                        onClick = {
+                                            preferences.setSensorHardwareControls(refreshRateMs = ms)
+                                            Toast.makeText(context, "Refresh rate set to $label", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    ) {
+                                        Text(text = label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                speeds.drop(3).forEach { (ms, label) ->
+                                    val selected = userPrefs!!.sensorRefreshRateMs == ms
+                                    FilledTonalButton(
+                                        onClick = {
+                                            preferences.setSensorHardwareControls(refreshRateMs = ms)
+                                            Toast.makeText(context, "Refresh rate set to $label", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    ) {
+                                        Text(text = label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Custom Get Up & Move Reminders
+                item {
+                    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(18.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.NotificationsActive,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "GET UP & MOVE REMINDERS",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            SettingToggleRow(
+                                title = "Enable Move Alerts",
+                                subtitle = "Periodic notification reminding you to take steps and stretch",
+                                checked = userPrefs!!.moveReminderEnabled,
+                                onCheckedChange = { checked ->
+                                    preferences.setMoveReminderSettings(
+                                        enabled = checked,
+                                        intervalMinutes = userPrefs!!.moveReminderIntervalMinutes,
+                                        customMessage = reminderMessageText
+                                    )
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Reminder Interval: Every ${userPrefs!!.moveReminderIntervalMinutes} minutes",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val intervals = listOf(15, 30, 45, 60, 90)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                intervals.forEach { mins ->
+                                    val isSelected = userPrefs!!.moveReminderIntervalMinutes == mins
+                                    FilledTonalButton(
+                                        onClick = {
+                                            preferences.setMoveReminderSettings(
+                                                enabled = userPrefs!!.moveReminderEnabled,
+                                                intervalMinutes = mins,
+                                                customMessage = reminderMessageText
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    ) {
+                                        Text("${mins}m", fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Custom Reminder Message",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = reminderMessageText,
+                                onValueChange = {
+                                    reminderMessageText = it
+                                    preferences.setMoveReminderSettings(
+                                        enabled = userPrefs!!.moveReminderEnabled,
+                                        intervalMinutes = userPrefs!!.moveReminderIntervalMinutes,
+                                        customMessage = it
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("e.g. Time to stretch and hit your step goal!") }
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            FilledTonalButton(
+                                onClick = {
+                                    moveReminderManager?.sendTestReminder()
+                                    Toast.makeText(context, "Sent test reminder notification!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Send Test Move Alert Now")
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             // WEAR OS COMPANION TAB
+            item {
+                LiquidGlassPanel(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⌚", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Direct Smartwatch Pairing (No Watch App Needed)",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Pairs seamlessly with any Wear OS watch or Bluetooth fitness watch directly over standard BLE protocols. You can pair and stream heart rate right now without any watch app! The dedicated Wear OS companion app is planned soon for richer native watch tiles & complications.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             item {
                 // Wear OS Connection Hero
                 LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {

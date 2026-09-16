@@ -1,5 +1,6 @@
 package com.example.miles.ui.workout
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +22,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -30,6 +32,8 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
@@ -44,6 +48,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
@@ -82,11 +87,17 @@ import kotlinx.coroutines.launch
 fun WorkoutHudScreen(
     smartEngine: SmartTrackingEngine,
     onFinishWorkout: (ActivityEntity) -> Unit,
-    onDiscardWorkout: () -> Unit
+    onDiscardWorkout: () -> Unit,
+    onBack: () -> Unit = {}
 ) {
     val liveStats by smartEngine.liveStats.collectAsState()
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { 3 })
+
+    // Support edge swipe back gesture to minimize HUD while tracking
+    BackHandler(enabled = true) {
+        onBack()
+    }
 
     var isLocked by remember { mutableStateOf(false) }
     var isPocketMode by remember { mutableStateOf(false) }
@@ -157,6 +168,14 @@ fun WorkoutHudScreen(
             ) {
                 // Activity Type & Live status badge
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Minimize HUD to background",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                     Box(
                         modifier = Modifier
                             .size(10.dp)
@@ -211,6 +230,184 @@ fun WorkoutHudScreen(
                             imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                             contentDescription = "Lock",
                             tint = if (isLocked) Color(0xFFFF2D55) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // --- 1. ACTIVE ROUTE NAVIGATION BANNER ---
+            if (liveStats.activeNavRoute != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (liveStats.navIsOffRoute) Color(0xFFFF2D55).copy(alpha = 0.15f)
+                            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (liveStats.navIsOffRoute) Color(0xFFFF2D55) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (liveStats.navIsOffRoute) Icons.Default.Close else Icons.Default.Navigation,
+                                    contentDescription = "Navigation",
+                                    tint = if (liveStats.navIsOffRoute) Color(0xFFFF2D55) else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (liveStats.navIsOffRoute) "⚠️ OFF-ROUTE (${liveStats.navCrossTrackErrorM.toInt()}m)"
+                                        else "NAV: ${liveStats.activeNavRoute?.name ?: "Active Route"}",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                                        color = if (liveStats.navIsOffRoute) Color(0xFFFF2D55) else MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = if (liveStats.navIsOffRoute) "Turn around towards route path"
+                                        else "Next: ${liveStats.navNextWaypointName} (${liveStats.navDistanceToNextM.toInt()}m)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${(liveStats.navRemainingDistanceM / 1000.0).format(2)} km left",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                IconButton(
+                                    onClick = { smartEngine.stopNavigation() },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Stop Navigation",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { liveStats.navProgressPercent },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = if (liveStats.navIsOffRoute) Color(0xFFFF2D55) else MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // --- 2. PROGRESSIVE INTERVAL WORKOUT BANNER ---
+            if (liveStats.activeIntervalPlanName != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            when (liveStats.currentIntervalType) {
+                                "RUN" -> Color(0xFF00E676).copy(alpha = 0.15f)
+                                "SPRINT" -> Color(0xFFFF9100).copy(alpha = 0.15f)
+                                "WALK", "RECOVERY" -> Color(0xFF2979FF).copy(alpha = 0.15f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = when (liveStats.currentIntervalType) {
+                                "RUN" -> Color(0xFF00E676)
+                                "SPRINT" -> Color(0xFFFF9100)
+                                "WALK", "RECOVERY" -> Color(0xFF2979FF)
+                                else -> MaterialTheme.colorScheme.outline
+                            },
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(
+                                            when (liveStats.currentIntervalType) {
+                                                "RUN" -> Color(0xFF00E676)
+                                                "SPRINT" -> Color(0xFFFF9100)
+                                                "WALK", "RECOVERY" -> Color(0xFF2979FF)
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "${liveStats.currentIntervalType} (${liveStats.intervalIndex + 1}/${liveStats.totalIntervals})",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black, fontSize = 10.sp),
+                                        color = Color.Black
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = liveStats.currentIntervalLabel,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+
+                            // Big remaining countdown seconds
+                            val remSec = liveStats.currentIntervalRemainingSeconds
+                            val min = remSec / 60
+                            val sec = remSec % 60
+                            Text(
+                                text = String.format("%d:%02d", min, sec),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val progress = if (liveStats.currentIntervalTotalSeconds > 0) {
+                            1f - (liveStats.currentIntervalRemainingSeconds.toFloat() / liveStats.currentIntervalTotalSeconds)
+                        } else 0f
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = when (liveStats.currentIntervalType) {
+                                "RUN" -> Color(0xFF00E676)
+                                "SPRINT" -> Color(0xFFFF9100)
+                                "WALK", "RECOVERY" -> Color(0xFF2979FF)
+                                else -> MaterialTheme.colorScheme.primary
+                            },
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     }
                 }

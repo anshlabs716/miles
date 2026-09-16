@@ -1,6 +1,7 @@
 package com.example.miles.ui.dashboard
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -83,6 +84,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+import com.example.miles.data.local.MilesPreferences
+import com.example.miles.engine.PedometerManager
+
 @Composable
 fun DashboardScreen(
     smartEngine: SmartTrackingEngine,
@@ -90,6 +94,8 @@ fun DashboardScreen(
     deviceManager: DeviceManager,
     activities: List<ActivityEntity>,
     userPreferences: UserPreferences,
+    preferences: MilesPreferences? = null,
+    pedometerManager: PedometerManager? = null,
     onStartActivity: (ActivityType) -> Unit,
     onNavigateToHud: () -> Unit,
     onSelectActivity: (ActivityEntity) -> Unit,
@@ -98,10 +104,24 @@ fun DashboardScreen(
     val liveStats by smartEngine.liveStats.collectAsState()
     val mediaTrack by mediaIntegration.currentTrack.collectAsState()
 
+    // Real hardware steps combined with recorded workout steps
+    val pedometerSteps by (pedometerManager?.todaySteps?.collectAsState() ?: remember { mutableIntStateOf(0) })
+
     // Calculate real daily summaries strictly from user's activities
     val todayStart = rememberTodayStartTimestamp()
     val todayActivities = activities.filter { it.startTime >= todayStart }
-    val todaySteps = todayActivities.sumOf { it.steps }
+    val workoutSteps = todayActivities.sumOf { it.steps }
+    val rawSteps = maxOf(pedometerSteps, workoutSteps)
+
+    // Fluid stopwatch-like counter animation every time the user opens the app
+    val animatedStepCounter = remember { Animatable(0f) }
+    LaunchedEffect(rawSteps) {
+        animatedStepCounter.animateTo(
+            targetValue = rawSteps.toFloat(),
+            animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing)
+        )
+    }
+    val todaySteps = animatedStepCounter.value.toInt()
     val todayDistanceM = todayActivities.sumOf { it.distanceMeters }
     val isMetric = userPreferences.unit == DistanceUnit.METRIC
     val todayDistanceDisplay = if (isMetric) todayDistanceM / 1000.0 else todayDistanceM * 0.000621371
@@ -319,6 +339,18 @@ fun DashboardScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // Virtual Fitness Pet Companion (Parrot, Bunny, Dog, Cat, or Keep Off) & Lazy Day Manager
+        if (preferences != null) {
+            item {
+                FitnessPetCard(
+                    preferences = preferences,
+                    userPreferences = userPreferences,
+                    todaySteps = todaySteps,
+                    stepGoal = stepGoal
+                )
             }
         }
 

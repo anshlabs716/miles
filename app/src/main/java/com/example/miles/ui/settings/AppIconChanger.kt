@@ -17,13 +17,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -86,24 +89,56 @@ fun AppIconChangerSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Dynamic App Launcher Icon",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Dynamic App Launcher Icon",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Choose from all 12 custom launcher icons. Tap to switch alias or Refresh to synchronize with Android PackageManager.",
+                        text = "Choose from all 12 custom launcher styles. Select an icon or tap Refresh to synchronize launcher state.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = ::refresh, enabled = !isRefreshing) {
+                FilledTonalButton(
+                    onClick = ::refresh,
+                    enabled = !isRefreshing,
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
                     Icon(
                         Icons.Default.Refresh,
                         contentDescription = "Refresh launcher icon",
-                        tint = MaterialTheme.colorScheme.primary
+                        modifier = Modifier.size(16.dp)
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Refresh", fontSize = 12.sp)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Current Active Icon Pill
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(selectedIcon.colorHex))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Current: ${selectedIcon.label}",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
