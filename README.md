@@ -1,5 +1,8 @@
 # MILES
 
+[![Android Build](https://github.com/anshlabs716/miles/actions/workflows/android-build.yml/badge.svg)](https://github.com/anshlabs716/miles/actions/workflows/android-build.yml)
+[![GitHub Issues](https://img.shields.io/github/issues/anshlabs716/miles)](https://github.com/anshlabs716/miles/issues)
+
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portable data, customization, and a clean UI.
 
 > **Status:** Beta / active development. The project is not a stable release yet.
