@@ -61,6 +61,7 @@ import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.MoveReminderManager
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
+import com.example.miles.engine.TrackingForegroundService
 import com.example.miles.engine.TrackingState
 import com.example.miles.ui.dashboard.DashboardScreen
 import com.example.miles.ui.devices.DevicesScreen
@@ -78,22 +79,10 @@ import com.example.miles.wear.WearCompanionManager
 import kotlinx.coroutines.launch
 
 enum class MilesNavigationTab(val label: String, val icon: ImageVector) {
-    HOME("Home", Icons.Default.Home),
-    TRAINING("Training", Icons.Default.FitnessCenter),
-    JOURNAL("Journal", Icons.AutoMirrored.Filled.List),
-    ROUTES("Routes", Icons.Default.Map),
-    PROFILE("Profile", Icons.Default.Person)
+    HOME("Home", Icons.Default.Home), TRAINING("Training", Icons.Default.FitnessCenter), JOURNAL("Journal", Icons.AutoMirrored.Filled.List), ROUTES("Routes", Icons.Default.Map), PROFILE("Profile", Icons.Default.Person)
 }
 
-enum class MilesSubScreen {
-    NONE,
-    SETUP,
-    ACTIVITY_DETAIL,
-    WORKOUT_HUD,
-    DEVICES,
-    STUDIO,
-    DISTANCE_CALCULATOR
-}
+enum class MilesSubScreen { NONE, SETUP, ACTIVITY_DETAIL, WORKOUT_HUD, DEVICES, STUDIO, DISTANCE_CALCULATOR }
 
 class MainActivity : ComponentActivity() {
     private lateinit var database: MilesDatabase
@@ -110,14 +99,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         database = MilesDatabase.getInstance(this)
-        repository = MilesRepository(
-            database.activityDao(),
-            database.savedRouteDao(),
-            database.privacyZoneDao(),
-            database.goalDao()
-        )
+        repository = MilesRepository(database.activityDao(), database.savedRouteDao(), database.privacyZoneDao(), database.goalDao())
         preferences = MilesPreferences(this)
         smartEngine = SmartTrackingEngine(this, repository)
         wearCompanion = WearCompanionManager(this)
@@ -132,79 +115,45 @@ class MainActivity : ComponentActivity() {
             val userPrefs by preferences.userPreferences.collectAsState()
             val activities by repository.activities.collectAsState(initial = emptyList())
             val liveStats by smartEngine.liveStats.collectAsState()
-
-            // Upfront battery optimization exemption dialog
             val powerManager = remember { getSystemService(Context.POWER_SERVICE) as? PowerManager }
-            var showBatteryOptDialog by remember {
-                mutableStateOf(powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName))
-            }
+            var showBatteryOptDialog by remember { mutableStateOf(powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) }
 
-            val allPermissionsLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestMultiplePermissions()
-            ) { permissions ->
-                val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-                if (granted) {
-                    locationTracker.startTracking(
-                        intervalMs = userPrefs.sensorRefreshRateMs,
-                        gpsEnabled = userPrefs.gpsSensorEnabled,
-                        onUpdate = { point ->
-                            if (smartEngine.liveStats.value.state == TrackingState.RECORDING) {
-                                smartEngine.processLocation(point)
-                            }
-                        }
-                    )
+            val allPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+                val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+                val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
+                if (activityGranted) TrackingForegroundService.start(this@MainActivity)
+                if (locationGranted) {
+                    locationTracker.startTracking(intervalMs = userPrefs.sensorRefreshRateMs, gpsEnabled = userPrefs.gpsSensorEnabled) { point ->
+                        if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
+                    }
                 }
             }
 
             LaunchedEffect(Unit) {
                 repository.purgePreloadedSeedData()
                 val requiredPermissions = buildList {
-                    add(Manifest.permission.ACCESS_FINE_LOCATION)
-                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                        add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        add(Manifest.permission.ACTIVITY_RECOGNITION)
-                    }
+                    add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) add(Manifest.permission.ACTIVITY_RECOGNITION)
                     add(Manifest.permission.BODY_SENSORS)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                        add(Manifest.permission.BLUETOOTH_SCAN)
-                        add(Manifest.permission.BLUETOOTH_CONNECT)
-                    }
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT) }
                 }.toTypedArray()
                 allPermissionsLauncher.launch(requiredPermissions)
             }
 
-            // Continuous hardware tracking driven by user preferences
-            LaunchedEffect(userPrefs.stepSensorHardwareEnabled) {
-                if (userPrefs.stepSensorHardwareEnabled) {
-                    pedometerManager.startTracking()
-                } else {
-                    pedometerManager.stopTracking()
-                }
+            LaunchedEffect(userPrefs.hasCompletedSetup, userPrefs.stepSensorHardwareEnabled) {
+                val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (activityGranted && userPrefs.hasCompletedSetup) TrackingForegroundService.start(this@MainActivity)
+                if (userPrefs.stepSensorHardwareEnabled) pedometerManager.startTracking() else pedometerManager.stopTracking()
             }
 
             LaunchedEffect(userPrefs.sensorRefreshRateMs, userPrefs.gpsSensorEnabled) {
-                if (locationTracker.hasLocationPermission()) {
-                    locationTracker.startTracking(
-                        intervalMs = userPrefs.sensorRefreshRateMs,
-                        gpsEnabled = userPrefs.gpsSensorEnabled,
-                        onUpdate = { point ->
-                            if (smartEngine.liveStats.value.state == TrackingState.RECORDING) {
-                                smartEngine.processLocation(point)
-                            }
-                        }
-                    )
+                if (locationTracker.hasLocationPermission()) locationTracker.startTracking(userPrefs.sensorRefreshRateMs, userPrefs.gpsSensorEnabled) { point ->
+                    if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
                 }
             }
 
-            MilesTheme(
-                themeOption = userPrefs.theme,
-                liquidGlassEnabled = userPrefs.liquidGlassEnabled,
-                accessibility = userPrefs.accessibility
-            ) {
+            MilesTheme(themeOption = userPrefs.theme, liquidGlassEnabled = userPrefs.liquidGlassEnabled, accessibility = userPrefs.accessibility) {
                 var currentTab by remember { mutableStateOf(MilesNavigationTab.HOME) }
                 var tabBackStack by remember { mutableStateOf(listOf(MilesNavigationTab.HOME)) }
                 var subScreen by remember { mutableStateOf(MilesSubScreen.NONE) }
@@ -212,298 +161,60 @@ class MainActivity : ComponentActivity() {
                 var lastBackPressTime by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
                 val mainScope = rememberCoroutineScope()
 
-                // Android system back and predictive edge-swipe navigation.
-                // Every MILES screen & tab is handled as an in-app navigation level so a
-                // back gesture goes to the previous screen or tab instead of closing the app!
                 BackHandler(enabled = true) {
                     when {
-                        subScreen == MilesSubScreen.DISTANCE_CALCULATOR -> {
-                            subScreen = MilesSubScreen.STUDIO
-                        }
-                        subScreen == MilesSubScreen.ACTIVITY_DETAIL -> {
-                            subScreen = MilesSubScreen.NONE
-                        }
-                        subScreen == MilesSubScreen.STUDIO -> {
-                            subScreen = MilesSubScreen.NONE
-                        }
-                        subScreen == MilesSubScreen.DEVICES -> {
-                            subScreen = MilesSubScreen.NONE
-                        }
-                        subScreen == MilesSubScreen.WORKOUT_HUD -> {
-                            // Going back from an active workout hides the HUD but
-                            // keeps the workout recording alive in background.
-                            subScreen = MilesSubScreen.NONE
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Workout running in background. Tap card on Home to resume.",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        subScreen == MilesSubScreen.SETUP -> {
-                            if (userPrefs.hasCompletedSetup) subScreen = MilesSubScreen.NONE
-                        }
-                        tabBackStack.size > 1 -> {
-                            val popped = tabBackStack.dropLast(1)
-                            tabBackStack = popped
-                            currentTab = popped.last()
-                        }
-                        currentTab != MilesNavigationTab.HOME -> {
-                            currentTab = MilesNavigationTab.HOME
-                            tabBackStack = listOf(MilesNavigationTab.HOME)
-                        }
-                        else -> {
-                            val now = System.currentTimeMillis()
-                            if (now - lastBackPressTime < 2000L) {
-                                moveTaskToBack(true)
-                            } else {
-                                lastBackPressTime = now
-                                Toast.makeText(this@MainActivity, "Swipe back again to exit MILES", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        subScreen == MilesSubScreen.DISTANCE_CALCULATOR -> subScreen = MilesSubScreen.STUDIO
+                        subScreen == MilesSubScreen.ACTIVITY_DETAIL -> subScreen = MilesSubScreen.NONE
+                        subScreen == MilesSubScreen.STUDIO -> subScreen = MilesSubScreen.NONE
+                        subScreen == MilesSubScreen.DEVICES -> subScreen = MilesSubScreen.NONE
+                        subScreen == MilesSubScreen.WORKOUT_HUD -> { subScreen = MilesSubScreen.NONE; Toast.makeText(this@MainActivity, "Workout running in background. Tap card on Home to resume.", Toast.LENGTH_SHORT).show() }
+                        subScreen == MilesSubScreen.SETUP -> if (userPrefs.hasCompletedSetup) subScreen = MilesSubScreen.NONE
+                        tabBackStack.size > 1 -> { val popped = tabBackStack.dropLast(1); tabBackStack = popped; currentTab = popped.last() }
+                        currentTab != MilesNavigationTab.HOME -> { currentTab = MilesNavigationTab.HOME; tabBackStack = listOf(MilesNavigationTab.HOME) }
+                        else -> { val now = System.currentTimeMillis(); if (now - lastBackPressTime < 2000L) moveTaskToBack(true) else { lastBackPressTime = now; Toast.makeText(this@MainActivity, "Swipe back again to exit MILES", Toast.LENGTH_SHORT).show() } }
                     }
                 }
 
-                // Upfront battery optimization exemption dialog
                 if (showBatteryOptDialog) {
                     AlertDialog(
                         onDismissRequest = { showBatteryOptDialog = false },
                         icon = { Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         title = { Text("Unrestricted Background Battery", style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) },
-                        text = {
-                            Text(
-                                "MILES requires background battery exemption to continuously count your steps and record GPS routes accurately with your screen turned off, without being terminated by Android.",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    showBatteryOptDialog = false
-                                    try {
-                                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                            data = Uri.parse("package:$packageName")
-                                        }
-                                        startActivity(intent)
-                                    } catch (e: Exception) {
-                                        try {
-                                            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                        } catch (_: Exception) {}
-                                    }
-                                }
-                            ) {
-                                Text("Allow Exemption")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showBatteryOptDialog = false }) {
-                                Text("Not Now")
-                            }
-                        }
+                        text = { Text("MILES uses background tracking for real steps and active GPS routes. Android may stop tracking if battery restrictions remain enabled.", style = MaterialTheme.typography.bodyMedium) },
+                        confirmButton = { Button(onClick = { showBatteryOptDialog = false; runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply { data = Uri.parse("package:$packageName") }) }.onFailure { runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } } }) { Text("Allow Exemption") } },
+                        dismissButton = { TextButton(onClick = { showBatteryOptDialog = false }) { Text("Not Now") } }
                     )
                 }
 
                 if (!userPrefs.hasCompletedSetup || subScreen == MilesSubScreen.SETUP) {
-                    OnboardingSetupScreen(
-                        preferences = preferences,
-                        onSetupComplete = { subScreen = MilesSubScreen.NONE }
-                    )
+                    OnboardingSetupScreen(preferences = preferences, onSetupComplete = { subScreen = MilesSubScreen.NONE })
                 } else {
                     val configuration = LocalConfiguration.current
                     val isExpanded = configuration.screenWidthDp >= 600
                     val isWorkoutActive = liveStats.state != TrackingState.IDLE
-
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize(),
-                        bottomBar = {
-                            if (!isExpanded && subScreen == MilesSubScreen.NONE) {
-                                NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    tonalElevation = 6.dp
-                                ) {
-                                    MilesNavigationTab.entries.forEach { tab ->
-                                        NavigationBarItem(
-                                            selected = currentTab == tab,
-                                            onClick = {
-                                                if (currentTab != tab) {
-                                                    tabBackStack = tabBackStack + tab
-                                                    currentTab = tab
-                                                }
-                                                subScreen = MilesSubScreen.NONE
-                                            },
-                                            icon = {
-                                                if (tab == MilesNavigationTab.HOME && isWorkoutActive) {
-                                                    BadgedBox(badge = { Badge() }) {
-                                                        Icon(tab.icon, contentDescription = tab.label)
-                                                    }
-                                                } else {
-                                                    Icon(tab.icon, contentDescription = tab.label)
-                                                }
-                                            },
-                                            label = { Text(tab.label) }
-                                        )
-                                    }
-                                }
-                            }
+                    Scaffold(modifier = Modifier.fillMaxSize(), bottomBar = {
+                        if (!isExpanded && subScreen == MilesSubScreen.NONE) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 6.dp) {
+                            MilesNavigationTab.entries.forEach { tab -> NavigationBarItem(selected = currentTab == tab, onClick = { if (currentTab != tab) { tabBackStack = tabBackStack + tab; currentTab = tab }; subScreen = MilesSubScreen.NONE }, icon = { if (tab == MilesNavigationTab.HOME && isWorkoutActive) BadgedBox(badge = { Badge() }) { Icon(tab.icon, contentDescription = tab.label) } else Icon(tab.icon, contentDescription = tab.label) }, label = { Text(tab.label) }) }
                         }
-                    ) { innerPadding ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                        ) {
-                            if (isExpanded && subScreen == MilesSubScreen.NONE) {
-                                NavigationRail(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ) {
-                                    MilesNavigationTab.entries.forEach { tab ->
-                                        NavigationRailItem(
-                                            selected = currentTab == tab,
-                                            onClick = {
-                                                if (currentTab != tab) {
-                                                    tabBackStack = tabBackStack + tab
-                                                    currentTab = tab
-                                                }
-                                                subScreen = MilesSubScreen.NONE
-                                            },
-                                            icon = {
-                                                if (tab == MilesNavigationTab.HOME && isWorkoutActive) {
-                                                    BadgedBox(badge = { Badge() }) {
-                                                        Icon(tab.icon, contentDescription = tab.label)
-                                                    }
-                                                } else {
-                                                    Icon(tab.icon, contentDescription = tab.label)
-                                                }
-                                            },
-                                            label = { Text(tab.label) }
-                                        )
-                                    }
-                                }
+                    }) { innerPadding ->
+                        Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                            if (isExpanded && subScreen == MilesSubScreen.NONE) NavigationRail(modifier = Modifier.fillMaxHeight(), containerColor = MaterialTheme.colorScheme.surface) {
+                                MilesNavigationTab.entries.forEach { tab -> NavigationRailItem(selected = currentTab == tab, onClick = { if (currentTab != tab) { tabBackStack = tabBackStack + tab; currentTab = tab }; subScreen = MilesSubScreen.NONE }, icon = { Icon(tab.icon, contentDescription = tab.label) }, label = { Text(tab.label) }) }
                             }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            ) {
+                            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                                 when (subScreen) {
-                                    MilesSubScreen.WORKOUT_HUD -> {
-                                        WorkoutHudScreen(
-                                            smartEngine = smartEngine,
-                                            onFinishWorkout = { saved ->
-                                                selectedActivity = saved
-                                                subScreen = MilesSubScreen.ACTIVITY_DETAIL
-                                            },
-                                            onDiscardWorkout = { subScreen = MilesSubScreen.NONE },
-                                            onBack = { subScreen = MilesSubScreen.NONE }
-                                        )
-                                    }
-                                    MilesSubScreen.ACTIVITY_DETAIL -> {
-                                        selectedActivity?.let { act ->
-                                            ActivityDetailScreen(
-                                                activity = act,
-                                                repository = repository,
-                                                onBack = { subScreen = MilesSubScreen.NONE },
-                                                onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) },
-                                                onDeleted = { subScreen = MilesSubScreen.NONE }
-                                            )
-                                        } ?: run { subScreen = MilesSubScreen.NONE }
-                                    }
-                                    MilesSubScreen.DEVICES -> {
-                                        DevicesScreen(
-                                            deviceManager = deviceManager,
-                                            wearCompanion = wearCompanion,
-                                            preferences = preferences,
-                                            moveReminderManager = moveReminderManager
-                                        )
-                                    }
-                                    MilesSubScreen.STUDIO -> {
-                                        MilesStudioScreen(
-                                            repository = repository,
-                                            smartEngine = smartEngine,
-                                            wearCompanion = wearCompanion,
-                                            preferences = preferences,
-                                            onBack = { subScreen = MilesSubScreen.NONE },
-                                            onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR }
-                                        )
-                                    }
-                                    MilesSubScreen.DISTANCE_CALCULATOR -> {
-                                        DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
-                                    }
+                                    MilesSubScreen.WORKOUT_HUD -> WorkoutHudScreen(smartEngine = smartEngine, onFinishWorkout = { saved -> selectedActivity = saved; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onDiscardWorkout = { subScreen = MilesSubScreen.NONE }, onBack = { subScreen = MilesSubScreen.NONE })
+                                    MilesSubScreen.ACTIVITY_DETAIL -> selectedActivity?.let { act -> ActivityDetailScreen(activity = act, repository = repository, onBack = { subScreen = MilesSubScreen.NONE }, onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) }, onDeleted = { subScreen = MilesSubScreen.NONE }) } ?: run { subScreen = MilesSubScreen.NONE }
+                                    MilesSubScreen.DEVICES -> DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion, preferences = preferences, moveReminderManager = moveReminderManager)
+                                    MilesSubScreen.STUDIO -> MilesStudioScreen(repository = repository, smartEngine = smartEngine, wearCompanion = wearCompanion, preferences = preferences, onBack = { subScreen = MilesSubScreen.NONE }, onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR })
+                                    MilesSubScreen.DISTANCE_CALCULATOR -> DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
                                     MilesSubScreen.SETUP -> Unit
-                                    MilesSubScreen.NONE -> {
-                                        when (currentTab) {
-                                            MilesNavigationTab.HOME -> {
-                                                DashboardScreen(
-                                                    smartEngine = smartEngine,
-                                                    mediaIntegration = mediaIntegration,
-                                                    deviceManager = deviceManager,
-                                                    activities = activities,
-                                                    userPreferences = userPrefs,
-                                                    preferences = preferences,
-                                                    pedometerManager = pedometerManager,
-                                                    onStartActivity = { type ->
-                                                        smartEngine.counterIntervalMs = userPrefs.counterIntervalMs
-                                                        smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs
-                                                        smartEngine.startTracking(type)
-                                                        subScreen = MilesSubScreen.WORKOUT_HUD
-                                                    },
-                                                    onNavigateToHud = { subScreen = MilesSubScreen.WORKOUT_HUD },
-                                                    onSelectActivity = { act ->
-                                                        selectedActivity = act
-                                                        subScreen = MilesSubScreen.ACTIVITY_DETAIL
-                                                    },
-                                                    onOpenStudio = { subScreen = MilesSubScreen.STUDIO }
-                                                )
-                                            }
-                                            MilesNavigationTab.JOURNAL -> {
-                                                JournalScreen(
-                                                    activities = activities,
-                                                    repository = repository,
-                                                    onSelectActivity = { act ->
-                                                        selectedActivity = act
-                                                        subScreen = MilesSubScreen.ACTIVITY_DETAIL
-                                                    },
-                                                    onToggleFavorite = { act ->
-                                                        mainScope.launch {
-                                                            repository.toggleActivityFavorite(act.id)
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                            MilesNavigationTab.TRAINING -> {
-                                                ProgressiveTrainingScreen(
-                                                    preferences = preferences,
-                                                    onStartWorkout = { title, intervals, type ->
-                                                        smartEngine.counterIntervalMs = userPrefs.counterIntervalMs
-                                                        smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs
-                                                        smartEngine.startIntervalWorkout(title, intervals, type)
-                                                        subScreen = MilesSubScreen.WORKOUT_HUD
-                                                    }
-                                                )
-                                            }
-                                            MilesNavigationTab.ROUTES -> {
-                                                RouteBuilderScreen(
-                                                    repository = repository,
-                                                    onStartNavigation = { route ->
-                                                        smartEngine.setNavigationRoute(route)
-                                                        if (smartEngine.liveStats.value.state != TrackingState.RECORDING) {
-                                                            smartEngine.startTracking(ActivityType.RUNNING)
-                                                        }
-                                                        subScreen = MilesSubScreen.WORKOUT_HUD
-                                                    }
-                                                )
-                                            }
-                                            MilesNavigationTab.PROFILE -> {
-                                                SettingsScreen(
-                                                    preferences = preferences,
-                                                    repository = repository,
-                                                    onOpenStudio = { subScreen = MilesSubScreen.STUDIO },
-                                                    onOpenDevices = { subScreen = MilesSubScreen.DEVICES },
-                                                    onRerunSetup = { subScreen = MilesSubScreen.SETUP }
-                                                )
-                                            }
-                                        }
+                                    MilesSubScreen.NONE -> when (currentTab) {
+                                        MilesNavigationTab.HOME -> DashboardScreen(smartEngine = smartEngine, mediaIntegration = mediaIntegration, deviceManager = deviceManager, activities = activities, userPreferences = userPrefs, preferences = preferences, pedometerManager = pedometerManager, onStartActivity = { type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startTracking(type); subScreen = MilesSubScreen.WORKOUT_HUD }, onNavigateToHud = { subScreen = MilesSubScreen.WORKOUT_HUD }, onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onOpenStudio = { subScreen = MilesSubScreen.STUDIO })
+                                        MilesNavigationTab.JOURNAL -> JournalScreen(activities = activities, repository = repository, onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } })
+                                        MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
+                                        MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
+                                        MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP })
                                     }
                                 }
                             }
@@ -516,11 +227,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (::pedometerManager.isInitialized) {
-            pedometerManager.stopTracking()
-        }
-        if (::locationTracker.isInitialized) {
-            locationTracker.stopTracking()
-        }
+        if (::pedometerManager.isInitialized) pedometerManager.stopTracking()
+        if (::locationTracker.isInitialized) locationTracker.stopTracking()
     }
 }
