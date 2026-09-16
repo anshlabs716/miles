@@ -1,7 +1,22 @@
-# MILES
+# 🗺️ MILES
 
-[![Android Build](https://github.com/anshlabs716/miles/actions/workflows/android-build.yml/badge.svg)](https://github.com/anshlabs716/miles/actions/workflows/android-build.yml)
-[![GitHub Issues](https://img.shields.io/github/issues/anshlabs716/miles)](https://github.com/anshlabs716/miles/issues)
+### A modern, customizable, privacy-focused activity tracker for Android.
+
+<p align="center">
+  <img src="https://img.shields.io/badge/STATUS-BETA-orange?style=for-the-badge" alt="Beta">
+  <img src="https://img.shields.io/badge/DEVELOPMENT-ACTIVE-yellow?style=for-the-badge" alt="Active Development">
+  <img src="https://img.shields.io/badge/PLATFORM-ANDROID-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
+  <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/JETPACK%20COMPOSE-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/MAPS-OPENSTREETMAP-7EBC6F?style=for-the-badge&logo=openstreetmap&logoColor=white" alt="OpenStreetMap">
+  <img src="https://img.shields.io/badge/HEALTH%20CONNECT-SUPPORTED-4285F4?style=for-the-badge" alt="Health Connect">
+  <img src="https://img.shields.io/badge/WEAR%20OS-COMING%20SOON-4285F4?style=for-the-badge&logo=wearos&logoColor=white" alt="Wear OS Coming Soon">
+  <img src="https://img.shields.io/badge/PRIVACY-LOCAL--FIRST-8A2BE2?style=for-the-badge" alt="Privacy">
+  <img src="https://img.shields.io/badge/LICENSE-TBD-lightgrey?style=for-the-badge" alt="License">
+</p>
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portable data, customization, and a clean UI.
 
