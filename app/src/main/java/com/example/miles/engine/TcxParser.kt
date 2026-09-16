@@ -14,18 +14,18 @@ object TcxParser {
         val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
         val document = factory.newDocumentBuilder().parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
         val nodes = document.getElementsByTagNameNS("*", "Trackpoint")
-        val points = buildList {
-            for (i in 0 until nodes.length) {
-                val trackpoint = nodes.item(i) as? Element ?: continue
-                val lat = text(trackpoint, "Latitude")?.toDoubleOrNull() ?: continue
-                val lon = text(trackpoint, "Longitude")?.toDoubleOrNull() ?: continue
-                if (lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
-                val altitude = text(trackpoint, "AltitudeMeters")?.toDoubleOrNull() ?: 0.0
-                val time = text(trackpoint, "Time")?.let { parseIso(it) } ?: continue
-                val speed = text(trackpoint, "Speed")?.toFloatOrNull() ?: 0f
-                append(GpsPoint(lat, lon, altitude, 0f, speed, 0f, time))
-            }
-        }.sortedBy { it.timestamp }
+        val points = mutableListOf<GpsPoint>()
+        for (i in 0 until nodes.length) {
+            val trackpoint = nodes.item(i) as? Element ?: continue
+            val lat = text(trackpoint, "Latitude")?.toDoubleOrNull() ?: continue
+            val lon = text(trackpoint, "Longitude")?.toDoubleOrNull() ?: continue
+            if (lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
+            val altitude = text(trackpoint, "AltitudeMeters")?.toDoubleOrNull() ?: 0.0
+            val time = text(trackpoint, "Time")?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: continue
+            val speed = text(trackpoint, "Speed")?.toFloatOrNull() ?: 0f
+            points += GpsPoint(lat, lon, altitude, 0f, speed, 0f, time)
+        }
+        points.sortBy { it.timestamp }
         require(points.isNotEmpty()) { "TCX contains no valid GPS trackpoints" }
         val title = text(document.documentElement, "Activity") ?: "Imported TCX Activity"
         return Track(title, points.first().timestamp, points)
@@ -35,6 +35,4 @@ object TcxParser {
         val nodes = parent.getElementsByTagNameNS("*", localName)
         return if (nodes.length == 0) null else nodes.item(0).textContent?.trim()
     }
-
-    private fun parseIso(value: String): Long = java.time.Instant.parse(value).toEpochMilli()
 }
