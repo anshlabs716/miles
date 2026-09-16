@@ -8,7 +8,6 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
-import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.miles.data.model.GpsPoint
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -22,152 +21,149 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class LocationTracker(private val context: Context) {
-
-    private val fusedClient: FusedLocationProviderClient =
-        LocationServices.getFusedLocationProviderClient(context)
-    private val locationManager: LocationManager? =
-        context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-
+    private val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+    private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
     private val _currentLocation = MutableStateFlow<GpsPoint?>(null)
     val currentLocation: StateFlow<GpsPoint?> = _currentLocation.asStateFlow()
-
     private val _isTrackingLocation = MutableStateFlow(false)
     val isTrackingLocation: StateFlow<Boolean> = _isTrackingLocation.asStateFlow()
+    private val _gpsAvailable = MutableStateFlow(false)
+    val gpsAvailable: StateFlow<Boolean> = _gpsAvailable.asStateFlow()
+    private val _status = MutableStateFlow("GPS waiting for permission")
+    val status: StateFlow<String> = _status.asStateFlow()
+    private var callback: LocationCallback? = null
+    private var listenerRegistered = false
+    private var updateCallback: ((GpsPoint) -> Unit)? = null
+    private var intervalMs = 1000L
+    private var lastProcessedElapsedMs = 0L
 
-    private var onLocationUpdate: ((GpsPoint) -> Unit)? = null
-    private var locationCallback: LocationCallback? = null
-
-    private val systemLocationListener = object : LocationListener {
-        override fun onLocationChanged(loc: Location) {
-            handleNewLocation(loc)
-        }
+    private val fallbackListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) = processLocation(location)
         @Deprecated("Deprecated in Java")
-        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-        override fun onProviderEnabled(provider: String) {}
-        override fun onProviderDisabled(provider: String) {}
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+        override fun onProviderEnabled(provider: String) { refreshAvailability() }
+        override fun onProviderDisabled(provider: String) { refreshAvailability() }
     }
 
-    fun hasLocationPermission(): Boolean {
-        val fine = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return fine || coarse
+    init { refreshAvailability() }
+
+    fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    fun isLocationEnabled(): Boolean = runCatching {
+        locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
+            locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+    }.getOrDefault(false)
+
+    fun refreshAvailability() {
+        _gpsAvailable.value = hasLocationPermission() && isLocationEnabled()
+        _status.value = when {
+            !hasLocationPermission() -> "GPS permission required"
+            !isLocationEnabled() -> "Location services are OFF"
+            _isTrackingLocation.value -> "GPS tracking active"
+            else -> "GPS ready"
+        }
     }
 
-    private var lastProcessedTime: Long = 0L
-    private var currentIntervalMs: Long = 1000L
-
-    fun startTracking(
-        intervalMs: Long = 1000L,
-        gpsEnabled: Boolean = true,
-        onUpdate: ((GpsPoint) -> Unit)? = null
-    ) {
-        this.onLocationUpdate = onUpdate
-        this.currentIntervalMs = intervalMs.coerceIn(100L, 10000L)
-
+    fun startTracking(intervalMs: Long = 1000L, gpsEnabled: Boolean = true, onUpdate: ((GpsPoint) -> Unit)? = null) {
+        updateCallback = onUpdate
+        this.intervalMs = intervalMs.coerceIn(250L, 10_000L)
+        refreshAvailability()
         if (!gpsEnabled) {
-            Log.i("LocationTracker", "GPS tracking turned OFF by user setting.")
-            stopTracking()
+            stopTracking(clearCallback = false)
+            _status.value = "GPS disabled"
             return
         }
-
         if (!hasLocationPermission()) {
-            Log.w("LocationTracker", "Cannot start location tracking: permission not granted")
+            stopTracking(clearCallback = false)
+            _status.value = "GPS permission required"
             return
         }
-        if (_isTrackingLocation.value && locationCallback != null) {
-            // Already tracking with an active callback; avoid duplicate listener registration
+        if (!isLocationEnabled()) {
+            stopTracking(clearCallback = false)
+            _status.value = "Turn on Location services to use GPS"
             return
         }
 
+        stopTracking(clearCallback = false)
         try {
-            // Remove any previous listener before registering a new one
-            locationCallback?.let { fusedClient.removeLocationUpdates(it) }
-            // First fetch immediate last known location
-            fusedClient.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null) {
-                    handleNewLocation(loc)
-                } else {
-                    val lastGps = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                    val lastNet = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                    val bestLast = lastGps ?: lastNet
-                    if (bestLast != null) handleNewLocation(bestLast)
-                }
-            }
-
-            // High-precision fused location updates with user-configured refresh speed
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, currentIntervalMs)
-                .setMinUpdateIntervalMillis(currentIntervalMs / 2)
-                .setMinUpdateDistanceMeters(0.8f)
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, this.intervalMs)
+                .setMinUpdateIntervalMillis((this.intervalMs / 2L).coerceAtLeast(250L))
+                .setMinUpdateDistanceMeters(0.5f)
+                .setWaitForAccurateLocation(false)
                 .build()
-
-            val cb = object : LocationCallback() {
+            val newCallback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
-                    result.lastLocation?.let { handleNewLocation(it) }
+                    result.locations.forEach(::processLocation)
                 }
             }
-            locationCallback = cb
-
-            fusedClient.requestLocationUpdates(request, cb, Looper.getMainLooper())
+            callback = newCallback
+            fusedClient.requestLocationUpdates(request, newCallback, Looper.getMainLooper())
+            fusedClient.lastLocation.addOnSuccessListener { it?.let(::processLocation) }
+            listenerRegistered = true
             _isTrackingLocation.value = true
-        } catch (e: SecurityException) {
-            Log.e("LocationTracker", "SecurityException requesting location: ${e.message}")
-        } catch (e: Exception) {
-            Log.e("LocationTracker", "Error requesting location from fused provider, falling back to LocationManager: ${e.message}")
-            try {
-                // Fallback to system LocationManager only if FusedClient fails
-                locationManager?.let { lm ->
-                    if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        lm.requestLocationUpdates(
-                            LocationManager.GPS_PROVIDER,
-                            currentIntervalMs,
-                            0.8f,
-                            systemLocationListener,
-                            Looper.getMainLooper()
-                        )
-                        _isTrackingLocation.value = true
-                    }
-                }
-            } catch (fallbackEx: Exception) {
-                Log.e("LocationTracker", "Fallback LocationManager failed: ${fallbackEx.message}")
-            }
+            _gpsAvailable.value = true
+            _status.value = "GPS tracking active • " + this.intervalMs + " ms"
+        } catch (_: SecurityException) {
+            _isTrackingLocation.value = false
+            _status.value = "GPS permission required"
+        } catch (_: Exception) {
+            startLocationManagerFallback()
         }
     }
 
-    fun stopTracking() {
+    private fun startLocationManagerFallback() {
+        val manager = locationManager ?: return
         try {
-            locationCallback?.let { fusedClient.removeLocationUpdates(it) }
-            locationCallback = null
-            locationManager?.removeUpdates(systemLocationListener)
-        } catch (e: Exception) {
-            Log.w("LocationTracker", "Error stopping location updates: ${e.message}")
+            if (!hasLocationPermission() || !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                _status.value = "GPS provider unavailable"
+                return
+            }
+            @Suppress("MissingPermission")
+            manager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                intervalMs,
+                0.5f,
+                fallbackListener,
+                Looper.getMainLooper()
+            )
+            listenerRegistered = true
+            _isTrackingLocation.value = true
+            _gpsAvailable.value = true
+            _status.value = "GPS provider active • fallback"
+        } catch (_: Exception) {
+            _isTrackingLocation.value = false
+            _status.value = "Unable to start GPS"
         }
-        _isTrackingLocation.value = false
-        onLocationUpdate = null
     }
 
-    private fun handleNewLocation(loc: Location) {
-        val now = System.currentTimeMillis()
-        // Deduplicate rapid bursts based on user configured refresh interval
-        val minThreshold = (currentIntervalMs * 0.85).toLong().coerceAtLeast(100L)
-        if (now - lastProcessedTime < minThreshold) {
-            return
-        }
-        lastProcessedTime = now
+    fun stopTracking(clearCallback: Boolean = true) {
+        callback?.let { runCatching { fusedClient.removeLocationUpdates(it) } }
+        callback = null
+        runCatching { locationManager?.removeUpdates(fallbackListener) }
+        listenerRegistered = false
+        _isTrackingLocation.value = false
+        if (clearCallback) updateCallback = null
+        refreshAvailability()
+    }
 
+    private fun processLocation(location: Location) {
+        if (!listenerRegistered && !_isTrackingLocation.value) return
+        val nowElapsed = android.os.SystemClock.elapsedRealtime()
+        val minimumGap = (intervalMs * 0.5f).toLong().coerceAtLeast(250L)
+        if (nowElapsed - lastProcessedElapsedMs < minimumGap) return
+        lastProcessedElapsedMs = nowElapsed
         val point = GpsPoint(
-            latitude = loc.latitude,
-            longitude = loc.longitude,
-            altitude = loc.altitude,
-            accuracy = loc.accuracy,
-            speed = loc.speed,
-            bearing = loc.bearing,
-            timestamp = if (loc.time > 0) loc.time else now
+            latitude = location.latitude,
+            longitude = location.longitude,
+            altitude = if (location.hasAltitude()) location.altitude else 0.0,
+            accuracy = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
+            speed = if (location.hasSpeed()) location.speed else 0f,
+            bearing = if (location.hasBearing()) location.bearing else 0f,
+            timestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
         )
         _currentLocation.value = point
-        onLocationUpdate?.invoke(point)
+        updateCallback?.invoke(point)
     }
 }
