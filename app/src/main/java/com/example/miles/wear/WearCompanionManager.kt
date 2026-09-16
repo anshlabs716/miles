@@ -1,21 +1,17 @@
 package com.example.miles.wear
 
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
 
 enum class WearConnectionStatus(val label: String) {
-    CONNECTED("Connected"),
-    CONNECTING("Searching..."),
+    CONNECTED("MILES Watch App Connected"),
+    PAIRED("Watch Paired"),
+    CONNECTING("Checking paired watches..."),
     DISCONNECTED("Not Connected"),
     RECONNECTING("Reconnecting..."),
     UNSUPPORTED("No Watch Paired"),
@@ -28,16 +24,16 @@ data class WearDeviceProfile(
     val deviceName: String,
     val model: String,
     val protocolVersion: String = "MILES-WEAR-v2.4",
-    val milesWearVersion: String = "1.0.4-standalone",
-    val batteryPercent: Int = 100,
+    val milesWearVersion: String = "not installed",
+    val batteryPercent: Int = -1,
     val isCharging: Boolean = false,
     val supportedCapabilities: List<String> = listOf(
+        "ANDROID_BOND_DETECTION",
+        "PHONE_SIDE_SYNC_READY",
         "HEART_RATE_STREAM",
         "BAROMETER_ALTITUDE",
         "CADENCE_SENSOR",
         "REMOTE_CONTROL",
-        "COMPLICATIONS",
-        "TILES",
         "OFFLINE_SYNC"
     )
 )
@@ -46,7 +42,7 @@ data class WatchSettings(
     val hapticMilestoneAlerts: Boolean = true,
     val wristFlickToPause: Boolean = false,
     val alwaysOnScreenWorkout: Boolean = true,
-    val primaryMetric: String = "PACE", // PACE, DISTANCE, HEART_RATE, DURATION
+    val primaryMetric: String = "PACE",
     val secondaryMetric: String = "DISTANCE",
     val complicationSlot1: String = "DAILY_STEPS",
     val complicationSlot2: String = "WEEKLY_DISTANCE",
@@ -57,15 +53,19 @@ data class WatchSettings(
 data class WearLogMessage(
     val id: String = UUID.randomUUID().toString(),
     val timestamp: Long = System.currentTimeMillis(),
-    val direction: String, // "TX -> WATCH" or "RX <- WATCH"
+    val direction: String,
     val topic: String,
     val payload: String
 )
 
+/**
+ * Phone-side Wear integration. This class deliberately does not pretend that a
+ * watch-side MILES APK exists. Android pairing is detected for real; app-level
+ * sync becomes available once the future Wear companion is installed.
+ */
 class WearCompanionManager(private val context: Context) {
-    private val scope = CoroutineScope(Dispatchers.Default + Job())
+    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 
-    // Real default: Disconnected with NO fake device
     private val _connectionStatus = MutableStateFlow(WearConnectionStatus.DISCONNECTED)
     val connectionStatus: StateFlow<WearConnectionStatus> = _connectionStatus.asStateFlow()
 
@@ -80,57 +80,67 @@ class WearCompanionManager(private val context: Context) {
 
     fun scanAndConnect() {
         _connectionStatus.value = WearConnectionStatus.CONNECTING
-        logMessage("SYS", "SCAN_START", "Scanning local Bluetooth bonds for Wear OS nodes...")
-
-        scope.launch {
-            delay(1500L)
-            val btAdapter = runCatching { BluetoothAdapter.getDefaultAdapter() }.getOrNull()
-            val bondedWear = btAdapter?.bondedDevices?.firstOrNull { dev ->
-                val name = dev.name?.lowercase() ?: ""
-                name.contains("watch") || name.contains("wear") || name.contains("pixel") || name.contains("galaxy")
+        val adapter = bluetoothManager?.adapter
+        val bondedWear = runCatching {
+            adapter?.bondedDevices?.firstOrNull { device ->
+                val name = device.name?.lowercase().orEmpty()
+                name.contains("watch") || name.contains("wear") || name.contains("pixel watch") || name.contains("galaxy watch")
             }
+        }.getOrNull()
 
-            if (bondedWear != null) {
-                val profile = WearDeviceProfile(
-                    deviceId = bondedWear.address ?: UUID.randomUUID().toString(),
-                    deviceName = bondedWear.name ?: "Wear OS Smartwatch",
-                    model = "Wear OS Device"
-                )
-                _deviceProfile.value = profile
-                _connectionStatus.value = WearConnectionStatus.CONNECTED
-                logMessage("RX <- WATCH", "CONNECT_ACK", "{\"name\":\"${profile.deviceName}\",\"status\":\"PAIRED\"}")
-            } else {
-                _connectionStatus.value = WearConnectionStatus.DISCONNECTED
-                _deviceProfile.value = null
-                logMessage("SYS", "SCAN_RESULT", "No paired Wear OS watch found in Android Settings.")
-            }
+        if (bondedWear == null) {
+            _deviceProfile.value = null
+            _connectionStatus.value = WearConnectionStatus.DISCONNECTED
+            logMessage("SYS", "PAIR_SCAN", "No paired Wear OS-style watch found. Pair the watch in Android Bluetooth settings first.")
+            return
         }
+
+        val profile = WearDeviceProfile(
+            deviceId = bondedWear.address ?: "unknown",
+            deviceName = bondedWear.name ?: "Paired smartwatch",
+            model = "Android paired wearable",
+            milesWearVersion = "not installed"
+        )
+        _deviceProfile.value = profile
+        _connectionStatus.value = WearConnectionStatus.PAIRED
+        logMessage("SYS", "PAIR_FOUND", JSONObject().apply {
+            put("name", profile.deviceName)
+            put("addressKnown", profile.deviceId != "unknown")
+            put("milesAppInstalled", false)
+            put("syncReady", true)
+        }.toString())
     }
 
     fun disconnect() {
         _connectionStatus.value = WearConnectionStatus.DISCONNECTED
         _deviceProfile.value = null
-        logMessage("TX -> WATCH", "DISCONNECT", "{\"reason\":\"USER_REQUEST\"}")
+        logMessage("SYS", "PAIR_CLEAR", "Phone-side watch selection cleared; Android Bluetooth pairing is unchanged.")
     }
 
     fun togglePairing() {
-        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
-            disconnect()
-        } else {
-            scanAndConnect()
-        }
+        if (_deviceProfile.value != null) disconnect() else scanAndConnect()
     }
 
     fun pingWatch() {
-        logMessage("TX -> WATCH", "PING", "{\"timestamp\":${System.currentTimeMillis()}}")
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
+            logMessage("TX -> WATCH", "PING", "{\"timestamp\":${System.currentTimeMillis()}}")
+        } else {
+            logMessage("SYS", "PING_SKIPPED", "No MILES watch-side connection exists yet.")
+        }
     }
 
     fun triggerWatchSync() {
-        logMessage("TX -> WATCH", "SYNC_REQ", "{\"full\":true}")
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
+            logMessage("TX -> WATCH", "SYNC_REQ", "{\"full\":true}")
+        } else {
+            logMessage("SYS", "SYNC_QUEUED", "Watch is paired, but a MILES Wear APK is required for app-level sync.")
+        }
     }
 
     fun sendLiveWorkoutUpdate(durationSec: Long, distanceM: Double, calories: Double, hr: Int) {
-        logMessage("TX -> WATCH", "LIVE_METRICS", "{\"sec\":$durationSec,\"m\":$distanceM,\"cal\":$calories,\"hr\":$hr}")
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
+            logMessage("TX -> WATCH", "LIVE_METRICS", "{\"sec\":$durationSec,\"m\":$distanceM,\"cal\":$calories,\"hr\":$hr}")
+        }
     }
 
     fun updateWatchSettings(transform: (WatchSettings) -> WatchSettings) {
@@ -141,22 +151,20 @@ class WearCompanionManager(private val context: Context) {
             put("wrist_flick", updated.wristFlickToPause)
             put("always_on", updated.alwaysOnScreenWorkout)
             put("primary_metric", updated.primaryMetric)
+            put("secondary_metric", updated.secondaryMetric)
             put("complication_1", updated.complicationSlot1)
+            put("complication_2", updated.complicationSlot2)
             put("tile_sport", updated.tileQuickStartActivity)
+            put("auto_sync", updated.autoSyncOverBluetooth)
         }
-        logMessage("TX -> WATCH", "SETTING_SYNC", json.toString())
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) logMessage("TX -> WATCH", "SETTING_SYNC", json.toString())
     }
 
     fun sendHapticPulse() {
-        logMessage("TX -> WATCH", "HAPTIC_COMMAND", "{\"pattern\":\"DOUBLE_STRONG\"}")
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) logMessage("TX -> WATCH", "HAPTIC_COMMAND", "{\"pattern\":\"DOUBLE_STRONG\"}")
     }
 
     private fun logMessage(direction: String, topic: String, payload: String) {
-        val msg = WearLogMessage(
-            direction = direction,
-            topic = topic,
-            payload = payload
-        )
-        _communicationLogs.value = (_communicationLogs.value + msg).takeLast(40)
+        _communicationLogs.value = (_communicationLogs.value + WearLogMessage(direction = direction, topic = topic, payload = payload)).takeLast(40)
     }
 }
