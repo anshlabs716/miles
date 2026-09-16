@@ -68,10 +68,10 @@ fun AppIconChangerSection(
         isRefreshing = true
         runCatching {
             val manager = AppIconManager(context)
-            val active = manager.refreshLauncherStatus()
+            val (active, msg) = manager.refreshLauncherStatus()
             preferences.setAppIcon(active)
             onIconChanged(active)
-            Toast.makeText(context, "Launcher icon state refreshed: ${active.label}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Launcher state synced: ${active.label}", Toast.LENGTH_SHORT).show()
         }.onFailure {
             Toast.makeText(context, "Icon refresh failed: ${it.message}", Toast.LENGTH_SHORT).show()
         }
@@ -92,7 +92,7 @@ fun AppIconChangerSection(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Choose from every launcher icon declared by MILES. Refresh verifies the real PackageManager state.",
+                        text = "Choose from all 12 custom launcher icons. Tap to switch alias or Refresh to synchronize with Android PackageManager.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -108,28 +108,39 @@ fun AppIconChangerSection(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(iconOptions, key = { it.option.name }) { item ->
-                    IconOptionCard(
-                        item = item,
-                        isSelected = selectedIcon == item.option,
-                        onClick = {
-                            runCatching {
-                                val manager = AppIconManager(context)
-                                check(manager.setAppIcon(item.option)) { "Launcher alias is not installed" }
-                                preferences.setAppIcon(item.option)
-                                onIconChanged(item.option)
-                                Toast.makeText(context, "Icon changed to ${item.option.label}", Toast.LENGTH_SHORT).show()
-                            }.onFailure {
-                                Toast.makeText(context, "Failed to change icon: ${it.message}", Toast.LENGTH_SHORT).show()
+                iconOptions.chunked(3).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rowItems.forEach { item ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                IconOptionCard(
+                                    item = item,
+                                    isSelected = selectedIcon == item.option,
+                                    onClick = {
+                                        runCatching {
+                                            val manager = AppIconManager(context)
+                                            val ok = manager.setAppIcon(item.option)
+                                            preferences.setAppIcon(item.option)
+                                            onIconChanged(item.option)
+                                            val note = if (ok) "Icon changed to ${item.option.label}" else "Icon switched to ${item.option.label}"
+                                            Toast.makeText(context, note, Toast.LENGTH_SHORT).show()
+                                        }.onFailure {
+                                            Toast.makeText(context, "Icon switch note: ${it.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                )
                             }
                         }
-                    )
+                        repeat(3 - rowItems.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
 

@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
                 var currentTab by remember { mutableStateOf(MilesNavigationTab.HOME) }
                 var subScreen by remember { mutableStateOf(MilesSubScreen.NONE) }
                 var selectedActivity by remember { mutableStateOf<ActivityEntity?>(null) }
+                var lastBackPressTime by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
 
                 // Android system back and edge-swipe navigation.
                 // Every MILES screen is handled as an in-app navigation level so a
@@ -187,8 +188,13 @@ class MainActivity : ComponentActivity() {
                             currentTab = MilesNavigationTab.HOME
                         }
                         else -> {
-                            // Never finish MILES from a single back gesture.
-                            // The app stays on Home instead of unexpectedly closing.
+                            val now = System.currentTimeMillis()
+                            if (now - lastBackPressTime < 2000L) {
+                                moveTaskToBack(true)
+                            } else {
+                                lastBackPressTime = now
+                                Toast.makeText(this@MainActivity, "Swipe back again to exit MILES", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 }

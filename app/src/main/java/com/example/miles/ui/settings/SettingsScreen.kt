@@ -481,6 +481,36 @@ fun SettingsScreen(
                 }
             }
 
+            // 2. WORKOUT HUD & RUNTIME ENGINE
+            if (shouldShow(SettingsCategory.WORKOUT, "hud", "workout", "unit", "pause", "countdown", "metronome", "heart rate alarm", "cadence", "dnd", "tick", "battery")) {
+                item {
+                    WorkoutSettingsCard(
+                        userPrefs = userPrefs,
+                        preferences = preferences
+                    )
+                }
+            }
+
+            // 3. AUDIO COACH & METRONOME
+            if (shouldShow(SettingsCategory.AUDIO, "audio", "coach", "voice", "speech", "split", "volume", "cue", "announce", "tts")) {
+                item {
+                    AudioSettingsCard(
+                        userPrefs = userPrefs,
+                        preferences = preferences
+                    )
+                }
+            }
+
+            // 4. MAPS & GPS NAVIGATION
+            if (shouldShow(SettingsCategory.MAPS, "maps", "gps", "satellite", "osm", "rotation", "follow", "filter", "accuracy", "breadcrumb", "heading")) {
+                item {
+                    MapsSettingsCard(
+                        userPrefs = userPrefs,
+                        preferences = preferences
+                    )
+                }
+            }
+
             // 5. THEMES & APP ICONS - WITH ICON CHANGER
             if (shouldShow(SettingsCategory.APPEARANCE, "themes", "appearance", "color", "dark", "light", "amoled", "icon", "liquid glass", "glass")) {
                 item {
@@ -521,11 +551,11 @@ fun SettingsScreen(
                                                     .clip(CircleShape)
                                                     .background(
                                                         when (theme) {
-                                                            BaseThemeOption.TWILIGHT -> Color(0xFF00E5FF)
-                                                            BaseThemeOption.AMOLED -> Color(0xFF101010)
-                                                            BaseThemeOption.AMOLED_RED -> Color(0xFFFF2D55)
-                                                            BaseThemeOption.LIGHT -> Color(0xFFF0F4F8)
-                                                            BaseThemeOption.STOCK -> Color(0xFF7C4DFF)
+                                                             BaseThemeOption.TWILIGHT -> Color(0xFF00E5FF)
+                                                             BaseThemeOption.AMOLED -> Color(0xFF101010)
+                                                             BaseThemeOption.AMOLED_RED -> Color(0xFFFF2D55)
+                                                             BaseThemeOption.LIGHT -> Color(0xFFF0F4F8)
+                                                             BaseThemeOption.STOCK -> Color(0xFF7C4DFF)
                                                         }
                                                     )
                                             )
@@ -562,6 +592,113 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // 6. ACCESSIBILITY SUITE
+            if (shouldShow(SettingsCategory.ACCESSIBILITY, "accessibility", "larger text", "bold", "contrast", "motion", "color vision", "protanopia", "targets")) {
+                item {
+                    AccessibilitySettingsCard(
+                        userPrefs = userPrefs,
+                        preferences = preferences
+                    )
+                }
+            }
+
+            // 7. SENSORS & WEARABLES
+            if (shouldShow(SettingsCategory.SENSORS, "sensors", "wear", "watch", "bluetooth", "ble", "heart rate strap", "haptics", "vibration")) {
+                item {
+                    SensorsSettingsCard(
+                        onOpenDevices = onOpenDevices,
+                        vibrator = vibrator
+                    )
+                }
+            }
+
+            // 8. PRIVACY, DATA & EXPORTS
+            if (shouldShow(SettingsCategory.PRIVACY, "privacy", "zone", "backup", "trash", "restore", "wipe", "reset", "export", "sqlite")) {
+                item {
+                    PrivacySettingsCard(
+                        privacyZones = privacyZones,
+                        trashCount = trashActivities.size,
+                        onAddZone = { showAddZoneDialog = true },
+                        onDeleteZone = { zoneId ->
+                            scope.launch {
+                                repository.deletePrivacyZone(zoneId)
+                                Toast.makeText(context, "Privacy zone removed", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onOpenBackup = { showBackupDialog = true },
+                        onOpenTrash = { showTrashDialog = true },
+                        onWipeData = { showWipeConfirmDialog = true },
+                        onResetDefaults = { showResetDefaultsDialog = true }
+                    )
+                }
+            }
+
+            // 9. MILES STUDIO PROMINENT CARD
+            if (shouldShow(SettingsCategory.STUDIO, "studio", "kalman", "gnss", "developer", "math", "vdot", "nmea", "telemetry")) {
+                item {
+                    StudioShortcutCard(onOpenStudio = onOpenStudio)
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+
+        // ==========================================================
+        // DIALOGS
+        // ==========================================================
+        if (showAddZoneDialog) {
+            AddPrivacyZoneDialog(
+                onDismiss = { showAddZoneDialog = false },
+                onAdd = { name, lat, lon, radius ->
+                    scope.launch {
+                        repository.savePrivacyZone(
+                            PrivacyZoneEntity(
+                                name = name,
+                                latitude = lat,
+                                longitude = lon,
+                                radiusMeters = radius
+                            )
+                        )
+                        Toast.makeText(context, "Privacy zone '$name' saved", Toast.LENGTH_SHORT).show()
+                        showAddZoneDialog = false
+                    }
+                }
+            )
+        }
+
+        if (showBackupDialog) {
+            BackupRestoreDialog(onDismiss = { showBackupDialog = false })
+        }
+
+        if (showTrashDialog) {
+            TrashBinDialog(
+                trashActivities = trashActivities,
+                repository = repository,
+                onDismiss = { showTrashDialog = false }
+            )
+        }
+
+        if (showWipeConfirmDialog) {
+            WipeConfirmDialog(
+                onDismiss = { showWipeConfirmDialog = false },
+                onConfirmWipe = {
+                    scope.launch {
+                        repository.clearAllActivities()
+                        Toast.makeText(context, "All activity data has been wiped", Toast.LENGTH_LONG).show()
+                        showWipeConfirmDialog = false
+                    }
+                }
+            )
+        }
+
+        if (showResetDefaultsDialog) {
+            ResetDefaultsDialog(
+                preferences = preferences,
+                onDismiss = { showResetDefaultsDialog = false }
+            )
         }
     }
 }

@@ -243,7 +243,7 @@ fun MilesStudioScreen(
             IconButton(
                 onClick = {
                     smartEngine.refreshTelemetry()
-                    triggerHaptic(15)
+                    vibrate(15)
                     Toast.makeText(context, "Telemetry & Kalman Sensors Refreshed", Toast.LENGTH_SHORT).show()
                 }
             ) {
