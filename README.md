@@ -586,6 +586,6 @@ License: **GPLv3**
 
 **Real data. Real tracking. Portable data. Your device. Your data. all hail Foss and aosp.**
 
-Made by **AnshLabs716**.
+Made by **AnshLabs716 and jaiguyisland**.
 
 **i will never develop for apple,mac,windows and etc, android and linux only.**
