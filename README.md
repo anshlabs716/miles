@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/HEALTH%20CONNECT-SUPPORTED-4285F4?style=for-the-badge" alt="Health Connect">
   <img src="https://img.shields.io/badge/WEAR%20OS-COMING%20SOON-4285F4?style=for-the-badge&logo=wearos&logoColor=white" alt="Wear OS Coming Soon">
   <img src="https://img.shields.io/badge/PRIVACY-LOCAL--FIRST-8A2BE2?style=for-the-badge" alt="Privacy">
-  <img src="https://img.shields.io/badge/LICENSE-GPL-3.0-lightgrey?style=for-the-badge" alt="License">
+  ![GPLv3 License](https://img.shields.io/badge/License-GPLv3-blue.svg)
 </p>
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portable data, customization, and a clean UI.
