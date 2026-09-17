@@ -584,6 +584,8 @@ License: **GPLv3**
 
 ## MILES
 
-**Real data. Real tracking. Portable data. Your device. Your data.**
+**Real data. Real tracking. Portable data. Your device. Your data. all hail Foss and aosp.**
 
 Made by **AnshLabs716**.
+
+**i will never develop for apple mac and windows android and linux only**
