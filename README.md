@@ -578,7 +578,7 @@ Bug reports, testing, Android sensor work, UI improvements, performance fixes, d
 
 ## License
 
-License: **TBD**
+License: **GPLv3**
 
 ---
 
