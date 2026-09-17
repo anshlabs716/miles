@@ -588,4 +588,4 @@ License: **GPLv3**
 
 Made by **AnshLabs716**.
 
-**i will never develop for apple mac and windows android and linux only**
+**i will never develop for apple mac and windows android and linux only.**
