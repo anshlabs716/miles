@@ -121,8 +121,13 @@ class MainActivity : ComponentActivity() {
             val allPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
                 val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
-                if (activityGranted) TrackingForegroundService.start(this@MainActivity)
+                if (activityGranted) {
+                    TrackingForegroundService.start(this@MainActivity)
+                    pedometerManager.onPermissionStateChanged()
+                    pedometerManager.startTracking()
+                }
                 if (locationGranted) {
+                    locationTracker.refreshAvailability()
                     locationTracker.startTracking(intervalMs = userPrefs.sensorRefreshRateMs, gpsEnabled = userPrefs.gpsSensorEnabled) { point ->
                         if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
                     }
@@ -130,7 +135,6 @@ class MainActivity : ComponentActivity() {
             }
 
             LaunchedEffect(Unit) {
-                repository.purgePreloadedSeedData()
                 val requiredPermissions = buildList {
                     add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)

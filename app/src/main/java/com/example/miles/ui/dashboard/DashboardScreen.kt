@@ -104,8 +104,20 @@ fun DashboardScreen(
     val workoutSteps = todayActivities.sumOf { it.steps }
     val rawSteps = maxOf(pedometerSteps, workoutSteps)
     val animatedStepCounter = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        animatedStepCounter.snapTo(0f)
+        animatedStepCounter.animateTo(
+            targetValue = rawSteps.toFloat(),
+            animationSpec = tween(durationMillis = 1800, easing = FastOutSlowInEasing)
+        )
+    }
     LaunchedEffect(rawSteps) {
-        animatedStepCounter.animateTo(rawSteps.toFloat(), tween(1400, easing = FastOutSlowInEasing))
+        if (animatedStepCounter.value != rawSteps.toFloat()) {
+            animatedStepCounter.animateTo(
+                targetValue = rawSteps.toFloat(),
+                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing)
+            )
+        }
     }
     val todaySteps = animatedStepCounter.value.toInt()
     val todayDistanceM = todayActivities.sumOf { it.distanceMeters }
@@ -249,7 +261,7 @@ fun GoogleFitActivityRings(steps: Int, stepGoal: Int, activeMinutes: Int, active
             drawCircle(Color(0xFF00E676).copy(alpha = .15f), outer, center, style = Stroke(stroke))
             if (animatedMinutes > 0) drawArc(Color(0xFF00E676), -90f, animatedMinutes * 360f, false, Offset(center.x - outer, center.y - outer), Size(outer * 2, outer * 2), style = Stroke(stroke, cap = StrokeCap.Round))
             drawCircle(Color(0xFF00B0FF).copy(alpha = .15f), inner, center, style = Stroke(stroke))
-            if (animatedSteps > 0) drawArc(Color(0xFF00B0FF), -90f, animatedSteps * 360f, false, Offset(center.x - inner, center.y - inner), Size(inner * 2, inner * 2), style = Stroke(stroke, cap = StrokeCap.Round))
+            if (stepProgress > 0) drawArc(Color(0xFF00B0FF), -90f, stepProgress * 360f, false, Offset(center.x - inner, center.y - inner), Size(inner * 2, inner * 2), style = Stroke(stroke, cap = StrokeCap.Round))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(String.format(Locale.getDefault(), "%,d", steps), style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black))
@@ -269,7 +281,7 @@ fun MetricPill(icon: ImageVector, value: String, unit: String) {
 
 @Composable
 fun FluidSportCard(name: String, icon: ImageVector, isPreferred: Boolean, onClick: () -> Unit) {
-    LiquidGlassCard(Modifier.width(108.dp).clickable(onClick), shape = RoundedCornerShape(18.dp)) {
+    LiquidGlassCard(Modifier.width(108.dp).clickable { onClick() }, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(44.dp).clip(CircleShape).background(if (isPreferred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                 Icon(icon, name, tint = if (isPreferred) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
@@ -283,7 +295,7 @@ fun FluidSportCard(name: String, icon: ImageVector, isPreferred: Boolean, onClic
 fun CleanActivityCard(activity: ActivityEntity, isMetric: Boolean, onClick: () -> Unit) {
     val distance = if (isMetric) activity.distanceMeters / 1000.0 else activity.distanceMeters * .000621371
     val unit = if (isMetric) "km" else "mi"
-    LiquidGlassCard(Modifier.fillMaxWidth().clickable(onClick), shape = RoundedCornerShape(16.dp)) {
+    LiquidGlassCard(Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.fillMaxWidth().padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.AutoMirrored.Filled.DirectionsRun, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))

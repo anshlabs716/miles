@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
@@ -91,9 +92,11 @@ import com.example.miles.data.local.BaseThemeOption
 import com.example.miles.data.local.ColorVisionMode
 import com.example.miles.data.local.DistanceUnit
 import com.example.miles.data.local.MilesPreferences
+import com.example.miles.data.local.PetType
 import com.example.miles.data.model.PrivacyZoneEntity
 import com.example.miles.data.repository.MilesRepository
 import com.example.miles.data.repository.format
+import com.example.miles.ui.dashboard.PetSelectionDialog
 import com.example.miles.ui.theme.LiquidGlassCard
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -136,6 +139,7 @@ fun SettingsScreen(
     var showTrashDialog by remember { mutableStateOf(false) }
     var showWipeConfirmDialog by remember { mutableStateOf(false) }
     var showResetDefaultsDialog by remember { mutableStateOf(false) }
+    var showPetDialog by remember { mutableStateOf(false) }
 
     // Biometrics edit states
     var nameInput by remember(userPrefs.userName) { mutableStateOf(userPrefs.userName) }
@@ -481,6 +485,69 @@ fun SettingsScreen(
                 }
             }
 
+            // FITNESS PET & REST (LAZY) DAYS
+            if (shouldShow(SettingsCategory.ATHLETE, "pet", "lazy", "rest", "dog", "cat", "parrot", "bunny", "feed")) {
+                item {
+                    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Pets, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "FITNESS COMPANION & LAZY DAYS",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val petDisplay = if (userPrefs.petType == PetType.OFF) "Turned Off" else "${userPrefs.petType.emoji} ${userPrefs.petName} (${userPrefs.petType.displayName})"
+                                    Text(petDisplay, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                    Text(
+                                        text = if (userPrefs.petType == PetType.OFF) "Pet disabled for a minimal look"
+                                               else "Hit daily step goal to feed • Rest days: ${userPrefs.lazyDaysThisWeek}/${userPrefs.maxLazyDaysPerWeek} used this week",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                FilledTonalButton(onClick = { showPetDialog = true }) {
+                                    Text("Choose Pet", fontSize = 12.sp)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Allowed Lazy Days Per Week", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                    Text(
+                                        text = "Max rest days (2 or 3/wk) where pet feeding streak is protected",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf(2, 3).forEach { days ->
+                                        FilterChip(
+                                            selected = userPrefs.maxLazyDaysPerWeek == days,
+                                            onClick = { preferences.setMaxLazyDaysPerWeek(days) },
+                                            label = { Text("$days Days", fontSize = 11.sp) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 2. WORKOUT HUD & RUNTIME ENGINE
             if (shouldShow(SettingsCategory.WORKOUT, "hud", "workout", "unit", "pause", "countdown", "metronome", "heart rate alarm", "cadence", "dnd", "tick", "battery")) {
                 item {
@@ -607,6 +674,8 @@ fun SettingsScreen(
             if (shouldShow(SettingsCategory.SENSORS, "sensors", "wear", "watch", "bluetooth", "ble", "heart rate strap", "haptics", "vibration")) {
                 item {
                     SensorsSettingsCard(
+                        preferences = preferences,
+                        userPrefs = userPrefs,
                         onOpenDevices = onOpenDevices,
                         vibrator = vibrator
                     )
@@ -698,6 +767,21 @@ fun SettingsScreen(
             ResetDefaultsDialog(
                 preferences = preferences,
                 onDismiss = { showResetDefaultsDialog = false }
+            )
+        }
+
+        if (showPetDialog) {
+            PetSelectionDialog(
+                currentType = userPrefs.petType,
+                currentName = userPrefs.petName,
+                currentMaxLazyDays = userPrefs.maxLazyDaysPerWeek,
+                onDismiss = { showPetDialog = false },
+                onSave = { selectedType, newName, maxDays ->
+                    preferences.setPet(selectedType, newName)
+                    preferences.setMaxLazyDaysPerWeek(maxDays)
+                    showPetDialog = false
+                    Toast.makeText(context, "Pet & Rest Day settings saved!", Toast.LENGTH_SHORT).show()
+                }
             )
         }
     }

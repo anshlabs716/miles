@@ -397,30 +397,37 @@ class SmartTrackingEngine(
         var addedElevGain = 0.0
         var addedElevLoss = 0.0
 
+        var effectiveCurrentSpeedKmh = (point.speed * 3.6).toDouble()
+        var effectiveCurrentPaceSec = if (point.speed > 0.2f) (1000.0 / point.speed) else 0.0
+
         if (current.points.isNotEmpty()) {
             val last = current.points.last()
             val legDist = MilesRepository.calculateDistanceMeters(last.latitude, last.longitude, point.latitude, point.longitude)
 
             // Stationary noise & GPS drift deadband filter:
-            // 1. If GPS accuracy is poor (> 20m), do NOT accumulate distance or track jitter
-            // 2. If user speed is < 0.5 m/s (~1.8 km/h) and leg movement is < 3.0m, ignore as indoor/stationary wander
-            // 3. Minimum movement deadband of 1.5m
-            val isStationaryNoise = (point.accuracy > 20.0f) ||
-                    (point.speed < 0.5f && legDist < 3.0) ||
-                    (legDist < 1.5)
+            // Tolerant of realistic mobile GPS accuracies (up to 65m) and indoor/urban canyon signals
+            // Only reject extreme outliers (> 70m with negligible leg distance) or true sub-decimeter jitter (< 0.35m)
+            val isStationaryNoise = (point.accuracy > 70.0f && legDist < 5.0) || (legDist < 0.35)
 
             if (isStationaryNoise) {
-                // User is not actually moving: do not add drift distance, zero out instantaneous speed
+                // Device is stationary: update current altitude and GPS accuracy without accumulating artificial drift
                 _liveStats.value = current.copy(
                     gpsAccuracyMeters = point.accuracy,
                     currentElevationM = point.altitude,
-                    currentSpeedKmh = 0.0,
-                    currentPaceSecPerKm = 0.0
+                    currentSpeedKmh = if (point.speed > 0.3f) (point.speed * 3.6).toDouble() else 0.0,
+                    currentPaceSecPerKm = if (point.speed > 0.3f) (1000.0 / point.speed) else 0.0
                 )
                 return
             }
 
             totalDist = current.distanceMeters + legDist
+
+            // Calculate derived speed when device/emulator does not populate location.speed
+            val timeDeltaSec = ((point.timestamp - last.timestamp) / 1000.0).coerceIn(0.1, 15.0)
+            val derivedSpeedMps = if (timeDeltaSec > 0.1) legDist / timeDeltaSec else 0.0
+            val effectiveSpeedMps = if (point.speed > 0.2f) point.speed.toDouble() else derivedSpeedMps
+            effectiveCurrentSpeedKmh = effectiveSpeedMps * 3.6
+            effectiveCurrentPaceSec = if (effectiveSpeedMps > 0.25) (1000.0 / effectiveSpeedMps) else 0.0
 
             val elevDiff = point.altitude - last.altitude
             if (elevDiff > 0.6) addedElevGain = elevDiff
@@ -429,11 +436,12 @@ class SmartTrackingEngine(
 
         val elapsed = current.elapsedSeconds
         val avgSpeedKmh = if (elapsed > 0) (totalDist / elapsed) * 3.6 else 0.0
-        val avgPaceSec = if (totalDist > 50.0 && elapsed > 0) (elapsed / (totalDist / 1000.0)) else 0.0
-        val currentSpeedKmh = (point.speed * 3.6).toDouble()
-        val currentPaceSec = if (point.speed > 0.3f) (1000.0 / point.speed) else 0.0
+        val avgPaceSec = if (totalDist > 20.0 && elapsed > 0) (elapsed / (totalDist / 1000.0)) else 0.0
+        val currentSpeedKmh = effectiveCurrentSpeedKmh
+        val currentPaceSec = effectiveCurrentPaceSec
 
         val estimatedSteps = (totalDist / 0.76).toInt()
+        val stepCount = maxOf(current.stepCount, estimatedSteps)
         val calories = when (current.activityType) {
             ActivityType.RUNNING -> (totalDist * 0.065).toInt()
             ActivityType.CYCLING -> (totalDist * 0.035).toInt()
@@ -529,7 +537,7 @@ class SmartTrackingEngine(
             elevationGainM = current.elevationGainM + addedElevGain,
             elevationLossM = current.elevationLossM + addedElevLoss,
             currentElevationM = point.altitude,
-            stepCount = estimatedSteps,
+            stepCount = stepCount,
             calories = calories,
             points = newPoints,
             gpsAccuracyMeters = point.accuracy,

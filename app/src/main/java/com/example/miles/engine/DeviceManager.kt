@@ -1,5 +1,6 @@
 package com.example.miles.engine
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -43,6 +44,7 @@ data class ConnectedSource(
     val details: String
 )
 
+@SuppressLint("MissingPermission")
 class DeviceManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + Job())
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager

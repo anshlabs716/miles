@@ -394,11 +394,13 @@ fun FitnessPetCard(
         PetSelectionDialog(
             currentType = petType,
             currentName = userPreferences.petName,
+            currentMaxLazyDays = userPreferences.maxLazyDaysPerWeek,
             onDismiss = { showPetDialog = false },
-            onSave = { selectedType, newName ->
+            onSave = { selectedType, newName, maxLazyDays ->
                 preferences.setPet(selectedType, newName)
+                preferences.setMaxLazyDaysPerWeek(maxLazyDays)
                 showPetDialog = false
-                Toast.makeText(context, "Pet settings updated!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Pet & Lazy Day settings updated!", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -408,17 +410,19 @@ fun FitnessPetCard(
 fun PetSelectionDialog(
     currentType: PetType,
     currentName: String,
+    currentMaxLazyDays: Int = 3,
     onDismiss: () -> Unit,
-    onSave: (PetType, String) -> Unit
+    onSave: (PetType, String, Int) -> Unit
 ) {
     var selectedType by remember { mutableStateOf(currentType) }
     var petName by remember { mutableStateOf(if (currentName.isBlank() && currentType != PetType.OFF) currentType.defaultName else currentName) }
+    var maxLazyDays by remember { androidx.compose.runtime.mutableIntStateOf(currentMaxLazyDays.coerceIn(2, 3)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Choose Fitness Companion",
+                text = "Fitness Companion & Rest Days",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
         },
@@ -428,7 +432,7 @@ fun PetSelectionDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Pick your pet companion. Hit your step goal each day to feed it, or turn off for a minimal dashboard.",
+                    text = "Pick your pet companion (Parrot, Bunny, Dog, Cat) or turn off. Hit your step goal each day to feed it. Lazy days protect your streak!",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -487,7 +491,7 @@ fun PetSelectionDialog(
                 }
 
                 if (selectedType != PetType.OFF) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     OutlinedTextField(
                         value = petName,
                         onValueChange = { petName = it },
@@ -496,10 +500,49 @@ fun PetSelectionDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Allowed Lazy Days (Rest Days) Per Week:",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    listOf(2, 3).forEach { days ->
+                        val isDaySelected = maxLazyDays == days
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isDaySelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                )
+                                .border(
+                                    width = if (isDaySelected) 1.5.dp else 1.dp,
+                                    color = if (isDaySelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable { maxLazyDays = days }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$days Days / Week",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (isDaySelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isDaySelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(selectedType, petName) }) {
+            Button(onClick = { onSave(selectedType, petName, maxLazyDays) }) {
                 Text("Save")
             }
         },

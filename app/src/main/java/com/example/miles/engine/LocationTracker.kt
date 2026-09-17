@@ -116,22 +116,40 @@ class LocationTracker(private val context: Context) {
     private fun startLocationManagerFallback() {
         val manager = locationManager ?: return
         try {
-            if (!hasLocationPermission() || !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                _status.value = "GPS provider unavailable"
+            if (!hasLocationPermission()) {
+                _status.value = "GPS permission required"
+                return
+            }
+            val hasGps = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            val hasNetwork = manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            if (!hasGps && !hasNetwork) {
+                _status.value = "Location services disabled"
                 return
             }
             @Suppress("MissingPermission")
-            manager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                intervalMs,
-                0.5f,
-                fallbackListener,
-                Looper.getMainLooper()
-            )
+            if (hasGps) {
+                manager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    intervalMs,
+                    0.2f,
+                    fallbackListener,
+                    Looper.getMainLooper()
+                )
+            }
+            @Suppress("MissingPermission")
+            if (hasNetwork) {
+                manager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    intervalMs,
+                    0.2f,
+                    fallbackListener,
+                    Looper.getMainLooper()
+                )
+            }
             listenerRegistered = true
             _isTrackingLocation.value = true
             _gpsAvailable.value = true
-            _status.value = "GPS provider active • fallback"
+            _status.value = "Location active • " + this.intervalMs + " ms"
         } catch (_: Exception) {
             _isTrackingLocation.value = false
             _status.value = "Unable to start GPS"
@@ -151,14 +169,14 @@ class LocationTracker(private val context: Context) {
     private fun processLocation(location: Location) {
         if (!listenerRegistered && !_isTrackingLocation.value) return
         val nowElapsed = android.os.SystemClock.elapsedRealtime()
-        val minimumGap = (intervalMs * 0.5f).toLong().coerceAtLeast(250L)
+        val minimumGap = (intervalMs * 0.3f).toLong().coerceAtLeast(150L)
         if (nowElapsed - lastProcessedElapsedMs < minimumGap) return
         lastProcessedElapsedMs = nowElapsed
         val point = GpsPoint(
             latitude = location.latitude,
             longitude = location.longitude,
             altitude = if (location.hasAltitude()) location.altitude else 0.0,
-            accuracy = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
+            accuracy = if (location.hasAccuracy()) location.accuracy else 12.0f,
             speed = if (location.hasSpeed()) location.speed else 0f,
             bearing = if (location.hasBearing()) location.bearing else 0f,
             timestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()

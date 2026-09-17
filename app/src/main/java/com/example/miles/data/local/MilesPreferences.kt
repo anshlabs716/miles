@@ -554,6 +554,12 @@ class MilesPreferences(context: Context) {
         return true
     }
 
+    fun setMaxLazyDaysPerWeek(maxDays: Int) {
+        val clamped = maxDays.coerceIn(2, 3)
+        prefs.edit().putInt("max_lazy_days", clamped).apply()
+        _userPreferences.value = _userPreferences.value.copy(maxLazyDaysPerWeek = clamped)
+    }
+
     fun setPet(type: PetType, name: String? = null) {
         val chosenName = name ?: if (type != PetType.OFF) type.defaultName else "None"
         prefs.edit()

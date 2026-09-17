@@ -1,5 +1,10 @@
 package com.example.miles.ui.setup
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -31,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DirectionsBike
@@ -67,6 +73,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -801,7 +808,82 @@ private fun CompletionStep(
             }
         }
 
-        Spacer(modifier = Modifier.height(36.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Upfront Battery Optimization Exemption Card
+        val context = LocalContext.current
+        val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }
+        var isIgnoringBatteryOpt by remember {
+            mutableStateOf(powerManager != null && powerManager.isIgnoringBatteryOptimizations(context.packageName))
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isIgnoringBatteryOpt)
+                    Color(0xFF00E676).copy(alpha = 0.12f)
+                else
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (isIgnoringBatteryOpt) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
+                        contentDescription = null,
+                        tint = if (isIgnoringBatteryOpt) Color(0xFF00E676) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Background Battery Exemption",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isIgnoringBatteryOpt)
+                                "Exemption active: GPS & Steps won't be killed in background"
+                            else
+                                "Recommended upfront so Android doesn't kill GPS or steps",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (!isIgnoringBatteryOpt) {
+                    Button(
+                        onClick = {
+                            runCatching {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                            }.onFailure {
+                                runCatching {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Allow")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
 
         Button(
             onClick = onFinish,

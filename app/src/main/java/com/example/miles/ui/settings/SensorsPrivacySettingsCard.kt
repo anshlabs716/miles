@@ -1,7 +1,14 @@
 package com.example.miles.ui.settings
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
 import android.os.Vibrator
+import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,17 +19,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.Button
@@ -32,15 +45,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.miles.data.local.MilesPreferences
+import com.example.miles.data.local.UserPreferences
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.PrivacyZoneEntity
 import com.example.miles.data.repository.format
@@ -48,19 +70,230 @@ import com.example.miles.ui.theme.LiquidGlassCard
 
 @Composable
 fun SensorsSettingsCard(
+    preferences: MilesPreferences,
+    userPrefs: UserPreferences,
     onOpenDevices: () -> Unit,
     vibrator: Vibrator?
 ) {
+    val context = LocalContext.current
+    val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }
+    var isIgnoringBatteryOpt by remember {
+        mutableStateOf(powerManager != null && powerManager.isIgnoringBatteryOptimizations(context.packageName))
+    }
+
     LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Sensors, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "SENSORS, WEARABLES & HAPTICS",
+                    text = "HARDWARE SENSORS & TUNNELING",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // GPS Route Positioning Hardware Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("GPS Route Positioning", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = if (userPrefs.gpsSensorEnabled) "High-accuracy GNSS & Fused Location active" else "GPS disabled (indoor treadmill mode)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = userPrefs.gpsSensorEnabled,
+                    onCheckedChange = { preferences.setSensorHardwareControls(gpsEnabled = it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Motion Step Sensor Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Hardware Step Counter Sensor", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = if (userPrefs.stepSensorHardwareEnabled) "Motion coprocessor step tracking active" else "Hardware step tracking paused",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = userPrefs.stepSensorHardwareEnabled,
+                    onCheckedChange = { preferences.setSensorHardwareControls(stepHwEnabled = it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bluetooth Sensor Tunneling Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Bluetooth Sensor Tunneling", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = if (userPrefs.bluetoothTunnelingEnabled) "Tunneling BLE telemetry into active workout feed" else "Bluetooth sensor tunneling disabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = userPrefs.bluetoothTunnelingEnabled,
+                    onCheckedChange = { preferences.setSensorHardwareControls(btTunnelEnabled = it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Heart Rate BLE Sensor Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Heart Rate Sensor Stream", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = if (userPrefs.heartRateSensorEnabled) "Optical / chest strap BLE monitoring active" else "Heart rate stream off",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = userPrefs.heartRateSensorEnabled,
+                    onCheckedChange = { preferences.setSensorHardwareControls(hrEnabled = it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Refresh Rate (How fast it refreshes)
+            Text(
+                text = "Sensor Sampling & Refresh Rate",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+            )
+            Text(
+                text = "Controls how fast GPS and telemetry refresh during activity",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val refreshOptions = listOf(
+                250L to "250ms (Ultra)",
+                500L to "500ms (High)",
+                1000L to "1s (Normal)",
+                2000L to "2s (Eco)",
+                5000L to "5s (Saver)"
+            )
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(refreshOptions) { (rateMs, label) ->
+                    val isSelected = userPrefs.sensorRefreshRateMs == rateMs
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            )
+                            .border(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                preferences.setSensorHardwareControls(refreshRateMs = rateMs)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Battery Optimization Exemption Status Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (isIgnoringBatteryOpt) Color(0xFF00E676).copy(alpha = 0.12f)
+                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    )
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (isIgnoringBatteryOpt) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
+                        contentDescription = null,
+                        tint = if (isIgnoringBatteryOpt) Color(0xFF00E676) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Unrestricted Battery",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isIgnoringBatteryOpt) "Active • Tracking won't be killed" else "Tap to request exemption upfront",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (!isIgnoringBatteryOpt) {
+                    Button(
+                        onClick = {
+                            runCatching {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                            }.onFailure {
+                                runCatching {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Allow", fontSize = 12.sp)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))

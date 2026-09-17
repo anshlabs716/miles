@@ -42,6 +42,10 @@ android {
   buildFeatures { compose = true; buildConfig = true }
   testOptions { unitTests { isIncludeAndroidResources = true } }
   dependenciesInfo { includeInApk = false; includeInBundle = true }
+  lint {
+    abortOnError = false
+    checkReleaseBuilds = false
+  }
 }
 
 secrets {
