@@ -87,7 +87,17 @@ class PedometerManager(
             .putInt(KEY_TODAY_STEPS, safe)
             .putFloat(KEY_LAST_COUNTER, lastCounterValue)
             .apply()
-        runCatching { com.example.miles.widget.MilesWidgetUpdater.updateAll(context) }
+        runCatching {
+            com.example.miles.widget.MilesWidgetUpdater.updateAllWidgets(
+                context = context,
+                calories = 0,
+                calGoal = 0,
+                steps = safe,
+                stepGoal = 0,
+                activeMin = 0,
+                activeGoal = 0
+            )
+        }
     }
 
     private fun setupSensors() {
