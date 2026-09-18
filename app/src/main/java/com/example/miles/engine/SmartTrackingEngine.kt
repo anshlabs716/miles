@@ -260,7 +260,17 @@ class SmartTrackingEngine(
             .putInt("today_workout_duration_min", curMin + (current.elapsedSeconds / 60).toInt())
             .putFloat("today_workout_distance_m", curDist + current.distanceMeters.toFloat())
             .apply()
-        runCatching { com.example.miles.widget.MilesWidgetUpdater.updateAll(context) }
+        runCatching {
+            com.example.miles.widget.MilesWidgetUpdater.updateAllWidgets(
+                context = context,
+                calories = 0,
+                calGoal = 0,
+                steps = 0,
+                stepGoal = 0,
+                activeMin = 0,
+                activeGoal = 0
+            )
+        }
 
         _liveStats.value = LiveWorkoutStats(state = TrackingState.IDLE)
         return entity
