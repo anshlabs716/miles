@@ -667,6 +667,8 @@ fun SensorSourceItem(
                     DeviceSourceType.PHONE_STEP_COUNTER -> Icons.Default.Smartphone
                     DeviceSourceType.BLE_HEART_RATE -> Icons.Default.Favorite
                     DeviceSourceType.WEAR_OS_SENSOR -> Icons.Default.Watch
+                    DeviceSourceType.BLE_CYCLING_SENSOR -> Icons.Default.Sensors
+                    DeviceSourceType.BLE_FOOT_POD -> Icons.Default.Sensors
                 }
                 Box(
                     modifier = Modifier

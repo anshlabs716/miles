@@ -121,13 +121,8 @@ class MainActivity : ComponentActivity() {
             val allPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
                 val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
-                if (activityGranted) {
-                    TrackingForegroundService.start(this@MainActivity)
-                    pedometerManager.onPermissionStateChanged()
-                    pedometerManager.startTracking()
-                }
+                if (activityGranted) TrackingForegroundService.start(this@MainActivity)
                 if (locationGranted) {
-                    locationTracker.refreshAvailability()
                     locationTracker.startTracking(intervalMs = userPrefs.sensorRefreshRateMs, gpsEnabled = userPrefs.gpsSensorEnabled) { point ->
                         if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
                     }
@@ -135,6 +130,7 @@ class MainActivity : ComponentActivity() {
             }
 
             LaunchedEffect(Unit) {
+                repository.purgePreloadedSeedData()
                 val requiredPermissions = buildList {
                     add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
@@ -164,6 +160,18 @@ class MainActivity : ComponentActivity() {
                 var selectedActivity by remember { mutableStateOf<ActivityEntity?>(null) }
                 var lastBackPressTime by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
                 val mainScope = rememberCoroutineScope()
+
+                LaunchedEffect(intent) {
+                    val quickSport = intent?.getStringExtra(com.example.miles.widget.MilesQuickWorkoutWidgetProvider.EXTRA_START_SPORT)
+                    if (!quickSport.isNullOrBlank()) {
+                        val sportType = ActivityType.fromString(quickSport)
+                        smartEngine.counterIntervalMs = userPrefs.counterIntervalMs
+                        smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs
+                        smartEngine.startTracking(sportType)
+                        subScreen = MilesSubScreen.WORKOUT_HUD
+                        intent.removeExtra(com.example.miles.widget.MilesQuickWorkoutWidgetProvider.EXTRA_START_SPORT)
+                    }
+                }
 
                 BackHandler(enabled = true) {
                     when {
@@ -214,7 +222,28 @@ class MainActivity : ComponentActivity() {
                                     MilesSubScreen.DISTANCE_CALCULATOR -> DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
                                     MilesSubScreen.SETUP -> Unit
                                     MilesSubScreen.NONE -> when (currentTab) {
-                                        MilesNavigationTab.HOME -> DashboardScreen(smartEngine = smartEngine, mediaIntegration = mediaIntegration, deviceManager = deviceManager, activities = activities, userPreferences = userPrefs, preferences = preferences, pedometerManager = pedometerManager, onStartActivity = { type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startTracking(type); subScreen = MilesSubScreen.WORKOUT_HUD }, onNavigateToHud = { subScreen = MilesSubScreen.WORKOUT_HUD }, onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onOpenStudio = { subScreen = MilesSubScreen.STUDIO })
+                                        MilesNavigationTab.HOME -> DashboardScreen(
+                                            smartEngine = smartEngine,
+                                            mediaIntegration = mediaIntegration,
+                                            deviceManager = deviceManager,
+                                            activities = activities,
+                                            userPreferences = userPrefs,
+                                            preferences = preferences,
+                                            pedometerManager = pedometerManager,
+                                            wearCompanion = wearCompanion,
+                                            onStartActivity = { type ->
+                                                smartEngine.counterIntervalMs = userPrefs.counterIntervalMs
+                                                smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs
+                                                smartEngine.startTracking(type)
+                                                subScreen = MilesSubScreen.WORKOUT_HUD
+                                            },
+                                            onNavigateToHud = { subScreen = MilesSubScreen.WORKOUT_HUD },
+                                            onSelectActivity = { act ->
+                                                selectedActivity = act
+                                                subScreen = MilesSubScreen.ACTIVITY_DETAIL
+                                            },
+                                            onOpenStudio = { subScreen = MilesSubScreen.STUDIO }
+                                        )
                                         MilesNavigationTab.JOURNAL -> JournalScreen(activities = activities, repository = repository, onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } })
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
@@ -227,6 +256,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 
     override fun onDestroy() {

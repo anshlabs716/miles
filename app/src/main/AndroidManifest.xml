@@ -44,5 +44,28 @@
         <activity-alias android:name="com.example.MainActivityRetro" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_retro" android:roundIcon="@mipmap/ic_launcher_retro" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
         <activity-alias android:name="com.example.MainActivityLime" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_lime" android:roundIcon="@mipmap/ic_launcher_lime" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
         <activity-alias android:name="com.example.MainActivityRoyal" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_royal" android:roundIcon="@mipmap/ic_launcher_royal" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
+
+        <!-- MILES Home Screen Widgets -->
+        <receiver
+            android:name="com.example.miles.widget.MilesRingsWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_miles_rings_info" />
+        </receiver>
+
+        <receiver
+            android:name="com.example.miles.widget.MilesQuickWorkoutWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_miles_quick_workout_info" />
+        </receiver>
     </application>
 </manifest>

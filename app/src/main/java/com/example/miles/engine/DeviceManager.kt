@@ -1,6 +1,5 @@
 package com.example.miles.engine
 
-import android.annotation.SuppressLint
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -31,7 +30,9 @@ enum class DeviceSourceType(val displayName: String, val category: String) {
     EXTERNAL_GNSS("External Bluetooth GPS", "Location"),
     PHONE_STEP_COUNTER("Built-in Pedometer", "Motion"),
     BLE_HEART_RATE("Bluetooth HR Strap", "Heart Rate"),
-    WEAR_OS_SENSOR("Wear OS Smartwatch", "Wearable")
+    WEAR_OS_SENSOR("Wear OS Smartwatch", "Wearable"),
+    BLE_CYCLING_SENSOR("Cycling Speed/Cadence", "Cycling"),
+    BLE_FOOT_POD("Running Foot Pod", "Motion")
 }
 
 data class ConnectedSource(
@@ -44,7 +45,6 @@ data class ConnectedSource(
     val details: String
 )
 
-@SuppressLint("MissingPermission")
 class DeviceManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + Job())
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -61,6 +61,18 @@ class DeviceManager(private val context: Context) {
 
     private val _heartRateBpm = MutableStateFlow<Int?>(null)
     val heartRateBpm: StateFlow<Int?> = _heartRateBpm.asStateFlow()
+
+    private val _hasHeartRateCapability = MutableStateFlow(false)
+    val hasHeartRateCapability: StateFlow<Boolean> = _hasHeartRateCapability.asStateFlow()
+
+    private val _isBluetoothTunnelling = MutableStateFlow(false)
+    val isBluetoothTunnelling: StateFlow<Boolean> = _isBluetoothTunnelling.asStateFlow()
+
+    private val _sensorUpdateFrequencyHz = MutableStateFlow(1)
+    val sensorUpdateFrequencyHz: StateFlow<Int> = _sensorUpdateFrequencyHz.asStateFlow()
+
+    private val _gattPacketsReceived = MutableStateFlow(0L)
+    val gattPacketsReceived: StateFlow<Long> = _gattPacketsReceived.asStateFlow()
 
     private val _lastBleError = MutableStateFlow<String?>(null)
     val lastBleError: StateFlow<String?> = _lastBleError.asStateFlow()
@@ -80,6 +92,7 @@ class DeviceManager(private val context: Context) {
 
     init {
         addInternalSources()
+        checkBondedDevices()
     }
 
     private fun hasScanPermission(): Boolean =
@@ -89,6 +102,47 @@ class DeviceManager(private val context: Context) {
     private fun hasConnectPermission(): Boolean =
         android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    private fun updateHrCapability() {
+        _hasHeartRateCapability.value = _sources.value.any { 
+            (it.type == DeviceSourceType.BLE_HEART_RATE || it.type == DeviceSourceType.WEAR_OS_SENSOR) && 
+            (it.isConnected || it.id.startsWith("bonded_"))
+        }
+    }
+
+    fun checkBondedDevices() {
+        if (!hasConnectPermission()) return
+        val bonded = runCatching { adapter?.bondedDevices }.getOrNull().orEmpty()
+        val detected = bonded.mapNotNull { device ->
+            val name = (device.name ?: "").lowercase()
+            val type = when {
+                name.contains("watch") || name.contains("wear") || name.contains("pixel watch") || name.contains("galaxy watch") || name.contains("fitbit") -> DeviceSourceType.WEAR_OS_SENSOR
+                name.contains("heart") || name.contains("hrm") || name.contains("polar") || name.contains("wahoo") -> DeviceSourceType.BLE_HEART_RATE
+                name.contains("cadence") || name.contains("speed") || name.contains("cycl") -> DeviceSourceType.BLE_CYCLING_SENSOR
+                name.contains("pod") || name.contains("stride") || name.contains("foot") -> DeviceSourceType.BLE_FOOT_POD
+                name.contains("gps") || name.contains("garmin") -> DeviceSourceType.EXTERNAL_GNSS
+                else -> null
+            }
+            type?.let {
+                ConnectedSource(
+                    id = "bonded_${device.address}",
+                    name = device.name ?: "Bonded Device",
+                    type = it,
+                    isConnected = true,
+                    signalDbm = -45,
+                    details = "Android paired ${it.category}"
+                )
+            }
+        }
+        if (detected.isNotEmpty()) {
+            val existingIds = _sources.value.map { it.id }.toSet()
+            val newSources = detected.filterNot { it.id in existingIds }
+            if (newSources.isNotEmpty()) {
+                _sources.value = _sources.value + newSources
+            }
+        }
+        updateHrCapability()
+    }
 
     private fun addInternalSources() {
         val sm = context.getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
@@ -109,6 +163,7 @@ class DeviceManager(private val context: Context) {
             details = if (stepsAvailable) "Hardware step counter/detector" else "No hardware step counter detected"
         )
         _sources.value = listOf(gps, step)
+        updateHrCapability()
     }
 
     private fun addScanResult(result: ScanResult) {
@@ -120,12 +175,15 @@ class DeviceManager(private val context: Context) {
         val type = classify(result)
         val details = when (type) {
             DeviceSourceType.BLE_HEART_RATE -> "BLE Heart Rate Service detected"
-            DeviceSourceType.EXTERNAL_GNSS -> "Possible external GNSS / navigation sensor"
-            DeviceSourceType.WEAR_OS_SENSOR -> "Wear OS / smartwatch device"
+            DeviceSourceType.EXTERNAL_GNSS -> "External GNSS / navigation sensor"
+            DeviceSourceType.WEAR_OS_SENSOR -> "Wear OS / smartwatch sensor"
+            DeviceSourceType.BLE_CYCLING_SENSOR -> "Cycling Speed/Cadence sensor"
+            DeviceSourceType.BLE_FOOT_POD -> "Running foot pod / stride sensor"
             else -> "Bluetooth LE sensor"
         }
         val source = ConnectedSource(id, name, type, false, signalDbm = result.rssi, details = details)
         _sources.value = _sources.value.filterNot { it.id == id } + source
+        updateHrCapability()
     }
 
     private fun classify(result: ScanResult): DeviceSourceType {
@@ -134,8 +192,10 @@ class DeviceManager(private val context: Context) {
             if (hasConnectPermission()) result.device.name.orEmpty().lowercase() else ""
         }.getOrDefault("")
         return when {
-            HEART_RATE_SERVICE in uuids || name.contains("heart") || name.contains("hrm") -> DeviceSourceType.BLE_HEART_RATE
-            name.contains("pixel watch") || name.contains("wear os") || name.contains("galaxy watch") || name.contains("watch") -> DeviceSourceType.WEAR_OS_SENSOR
+            HEART_RATE_SERVICE in uuids || name.contains("heart") || name.contains("hrm") || name.contains("polar") || name.contains("wahoo") -> DeviceSourceType.BLE_HEART_RATE
+            CYCLING_SPEED_CADENCE in uuids || name.contains("cadence") || name.contains("speed") || name.contains("cycl") -> DeviceSourceType.BLE_CYCLING_SENSOR
+            RUNNING_SPEED_CADENCE in uuids || name.contains("pod") || name.contains("stride") || name.contains("foot") -> DeviceSourceType.BLE_FOOT_POD
+            name.contains("pixel watch") || name.contains("wear os") || name.contains("galaxy watch") || name.contains("watch") || name.contains("fitbit") -> DeviceSourceType.WEAR_OS_SENSOR
             name.contains("gps") || name.contains("gnss") || name.contains("garmin") -> DeviceSourceType.EXTERNAL_GNSS
             else -> DeviceSourceType.BLE_HEART_RATE
         }
@@ -228,12 +288,14 @@ class DeviceManager(private val context: Context) {
             }
 
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+                _gattPacketsReceived.value++
                 if (characteristic.uuid == HEART_RATE_MEASUREMENT) {
                     val flags = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0) ?: return
                     val format = if ((flags and 0x01) == 0) BluetoothGattCharacteristic.FORMAT_UINT8 else BluetoothGattCharacteristic.FORMAT_UINT16
                     val offset = 1
                     val bpm = characteristic.getIntValue(format, offset) ?: return
                     _heartRateBpm.value = bpm.coerceIn(20, 240)
+                    _hasHeartRateCapability.value = true
                 }
             }
         }
@@ -247,6 +309,15 @@ class DeviceManager(private val context: Context) {
             runCatching { gatt.close() }
         }
         _sources.value = _sources.value.map { if (it.id == id) it.copy(isConnected = false) else it }
+        updateHrCapability()
+    }
+
+    fun toggleBluetoothTunnelling() {
+        _isBluetoothTunnelling.value = !_isBluetoothTunnelling.value
+    }
+
+    fun setSensorUpdateFrequency(hz: Int) {
+        _sensorUpdateFrequencyHz.value = hz.coerceIn(1, 20)
     }
 
     fun close() {
@@ -258,6 +329,8 @@ class DeviceManager(private val context: Context) {
     companion object {
         val HEART_RATE_SERVICE: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
         val HEART_RATE_MEASUREMENT: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
+        val CYCLING_SPEED_CADENCE: UUID = UUID.fromString("00001816-0000-1000-8000-00805f9b34fb")
+        val RUNNING_SPEED_CADENCE: UUID = UUID.fromString("00001814-0000-1000-8000-00805f9b34fb")
         val CLIENT_CONFIG: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 }

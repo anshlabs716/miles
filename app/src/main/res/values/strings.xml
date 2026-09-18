@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">MILES</string>
+    <string name="widget_rings_description">Daily activity rings, step count, calories burned, and active minutes.</string>
+    <string name="widget_quick_workout_description">Quick 1-tap start for running, walking, and cycling workouts.</string>
 </resources>

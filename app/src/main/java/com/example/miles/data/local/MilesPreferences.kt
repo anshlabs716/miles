@@ -57,6 +57,14 @@ enum class PetType(val displayName: String, val emoji: String, val defaultName: 
     BUNNY("Bunny", "🐰", "Thumper", "Carrot 🥕")
 }
 
+enum class TrackingSourceMode(val label: String, val shortLabel: String, val description: String) {
+    ALL("All 3 Combined (Fused)", "All 3", "GPS + Step Sensors + Bluetooth Tunneling"),
+    GPS_ONLY("GPS Only", "GPS", "High precision satellite telemetry only"),
+    SENSORS_ONLY("Sensors Only", "Sensors", "Built-in hardware pedometer & accelerometer"),
+    BLUETOOTH_TUNNEL("Bluetooth Tunnel", "BT Tunnel", "External BLE sensors & Wear OS watch bridge"),
+    CUSTOM("Custom Combination", "Custom", "Toggle individual sensor feeds manually")
+}
+
 data class AccessibilitySettings(
     val largerText: Boolean = false,
     val largerUi: Boolean = false,
@@ -74,6 +82,7 @@ data class UserPreferences(
     val primarySport: String = "RUNNING",
     val dailyStepGoal: Int = 8000,
     val dailyActiveMinutesGoal: Int = 45,
+    val dailyCaloriesGoal: Int = 500,
     val weeklyDistanceGoalKm: Float = 25.0f,
     val theme: BaseThemeOption = BaseThemeOption.TWILIGHT,
     val liquidGlassEnabled: Boolean = true,
@@ -173,6 +182,7 @@ data class UserPreferences(
     val lastLazyDayDate: String = "",
 
     // Hardware Sensors & Tunneling Controls
+    val trackingSourceMode: TrackingSourceMode = TrackingSourceMode.ALL,
     val gpsSensorEnabled: Boolean = true,
     val stepSensorHardwareEnabled: Boolean = true,
     val bluetoothTunnelingEnabled: Boolean = true,
@@ -198,6 +208,7 @@ class MilesPreferences(context: Context) {
         val primarySport = prefs.getString("primary_sport", "RUNNING") ?: "RUNNING"
         val stepGoal = prefs.getInt("daily_step_goal", 8000)
         val activeMinGoal = prefs.getInt("daily_active_min_goal", 45)
+        val calorieGoal = prefs.getInt("daily_calorie_goal", 500)
         val weeklyDistGoal = prefs.getFloat("weekly_dist_goal", 25.0f)
 
         val themeStr = prefs.getString("theme", BaseThemeOption.TWILIGHT.name) ?: BaseThemeOption.TWILIGHT.name
@@ -229,6 +240,7 @@ class MilesPreferences(context: Context) {
             primarySport = primarySport,
             dailyStepGoal = stepGoal,
             dailyActiveMinutesGoal = activeMinGoal,
+            dailyCaloriesGoal = calorieGoal,
             weeklyDistanceGoalKm = weeklyDistGoal,
             theme = theme,
             liquidGlassEnabled = prefs.getBoolean("liquid_glass", true),
@@ -319,6 +331,9 @@ class MilesPreferences(context: Context) {
             maxLazyDaysPerWeek = prefs.getInt("max_lazy_days", 3),
             lastLazyDayDate = prefs.getString("last_lazy_date", "") ?: "",
 
+            trackingSourceMode = runCatching {
+                TrackingSourceMode.valueOf(prefs.getString("tracking_source_mode", TrackingSourceMode.ALL.name) ?: TrackingSourceMode.ALL.name)
+            }.getOrDefault(TrackingSourceMode.ALL),
             gpsSensorEnabled = prefs.getBoolean("gps_sensor_en", true),
             stepSensorHardwareEnabled = prefs.getBoolean("step_sensor_hw_en", true),
             bluetoothTunnelingEnabled = prefs.getBoolean("bt_tunnel_en", true),
@@ -554,6 +569,12 @@ class MilesPreferences(context: Context) {
         return true
     }
 
+    fun setDailyCaloriesGoal(calories: Int) {
+        val clamped = calories.coerceIn(100, 10000)
+        prefs.edit().putInt("daily_calorie_goal", clamped).apply()
+        _userPreferences.value = _userPreferences.value.copy(dailyCaloriesGoal = clamped)
+    }
+
     fun setMaxLazyDaysPerWeek(maxDays: Int) {
         val clamped = maxDays.coerceIn(2, 3)
         prefs.edit().putInt("max_lazy_days", clamped).apply()
@@ -569,6 +590,29 @@ class MilesPreferences(context: Context) {
         _userPreferences.value = _userPreferences.value.copy(
             petType = type,
             petName = chosenName
+        )
+    }
+
+    fun setTrackingSourceMode(mode: TrackingSourceMode) {
+        val cur = _userPreferences.value
+        val (gps, steps, bt) = when (mode) {
+            TrackingSourceMode.ALL -> Triple(true, true, true)
+            TrackingSourceMode.GPS_ONLY -> Triple(true, false, false)
+            TrackingSourceMode.SENSORS_ONLY -> Triple(false, true, false)
+            TrackingSourceMode.BLUETOOTH_TUNNEL -> Triple(false, false, true)
+            TrackingSourceMode.CUSTOM -> Triple(cur.gpsSensorEnabled, cur.stepSensorHardwareEnabled, cur.bluetoothTunnelingEnabled)
+        }
+        prefs.edit()
+            .putString("tracking_source_mode", mode.name)
+            .putBoolean("gps_sensor_en", gps)
+            .putBoolean("step_sensor_hw_en", steps)
+            .putBoolean("bt_tunnel_en", bt)
+            .apply()
+        _userPreferences.value = cur.copy(
+            trackingSourceMode = mode,
+            gpsSensorEnabled = gps,
+            stepSensorHardwareEnabled = steps,
+            bluetoothTunnelingEnabled = bt
         )
     }
 

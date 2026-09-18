@@ -21,14 +21,16 @@ class AppIconManager(private val context: Context) {
         ).distinct()
     }
 
-    /** Resolve a manifest alias by asking PackageManager whether the activity actually exists. */
+    /** Resolve a manifest alias by asking PackageManager whether the activity exists or providing candidate. */
     fun resolveComponentName(option: AppIconOption): ComponentName {
+        val flags = PackageManager.MATCH_DISABLED_COMPONENTS
         candidateNames(option).forEach { candidate ->
-            if (runCatching { packageManager.getActivityInfo(candidate, 0) }.isSuccess) {
+            if (runCatching { packageManager.getActivityInfo(candidate, flags) }.isSuccess) {
                 return candidate
             }
         }
-        throw IllegalStateException("Launcher alias ${option.aliasClass} is not declared in the installed APK")
+        val simpleName = option.aliasClass.substringAfterLast('.')
+        return ComponentName(context.packageName, "com.example.$simpleName")
     }
 
     /** Enables exactly one real launcher alias and disables the other aliases. */

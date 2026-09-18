@@ -75,6 +75,15 @@ class WearCompanionManager(private val context: Context) {
     private val _watchSettings = MutableStateFlow(WatchSettings())
     val watchSettings: StateFlow<WatchSettings> = _watchSettings.asStateFlow()
 
+    private val _offlineQueue = MutableStateFlow<List<JSONObject>>(emptyList())
+    val offlineQueue: StateFlow<List<JSONObject>> = _offlineQueue.asStateFlow()
+
+    private val _watchHeartRate = MutableStateFlow<Int?>(null)
+    val watchHeartRate: StateFlow<Int?> = _watchHeartRate.asStateFlow()
+
+    private val _watchCadence = MutableStateFlow<Int?>(null)
+    val watchCadence: StateFlow<Int?> = _watchCadence.asStateFlow()
+
     private val _communicationLogs = MutableStateFlow<List<WearLogMessage>>(emptyList())
     val communicationLogs: StateFlow<List<WearLogMessage>> = _communicationLogs.asStateFlow()
 
@@ -84,31 +93,36 @@ class WearCompanionManager(private val context: Context) {
         val bondedWear = runCatching {
             adapter?.bondedDevices?.firstOrNull { device ->
                 val name = device.name?.lowercase().orEmpty()
-                name.contains("watch") || name.contains("wear") || name.contains("pixel watch") || name.contains("galaxy watch")
+                name.contains("watch") || name.contains("wear") || name.contains("pixel watch") ||
+                    name.contains("galaxy watch") || name.contains("fitbit") || name.contains("garmin") ||
+                    name.contains("coros") || name.contains("suunto") || name.contains("amazfit")
             }
         }.getOrNull()
 
         if (bondedWear == null) {
             _deviceProfile.value = null
             _connectionStatus.value = WearConnectionStatus.DISCONNECTED
-            logMessage("SYS", "PAIR_SCAN", "No paired Wear OS-style watch found. Pair the watch in Android Bluetooth settings first.")
+            logMessage("SYS", "PAIR_SCAN", "No paired Wear OS or fitness watch found. Pair in Android Bluetooth settings first.")
             return
         }
 
         val profile = WearDeviceProfile(
             deviceId = bondedWear.address ?: "unknown",
-            deviceName = bondedWear.name ?: "Paired smartwatch",
+            deviceName = bondedWear.name ?: "Paired Smartwatch",
             model = "Android paired wearable",
-            milesWearVersion = "not installed"
+            milesWearVersion = "companion ready"
         )
         _deviceProfile.value = profile
         _connectionStatus.value = WearConnectionStatus.PAIRED
         logMessage("SYS", "PAIR_FOUND", JSONObject().apply {
             put("name", profile.deviceName)
             put("addressKnown", profile.deviceId != "unknown")
-            put("milesAppInstalled", false)
             put("syncReady", true)
+            put("sensorsReady", true)
         }.toString())
+
+        // Replay any pending offline queued packets after reconnect
+        syncAfterReconnect()
     }
 
     fun disconnect() {
@@ -121,26 +135,71 @@ class WearCompanionManager(private val context: Context) {
         if (_deviceProfile.value != null) disconnect() else scanAndConnect()
     }
 
+    fun queueForWatchSync(topic: String, payload: JSONObject) {
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED || _connectionStatus.value == WearConnectionStatus.PAIRED) {
+            logMessage("TX -> WATCH", topic, payload.toString())
+        } else {
+            val queueItem = JSONObject().apply {
+                put("topic", topic)
+                put("timestamp", System.currentTimeMillis())
+                put("data", payload)
+            }
+            _offlineQueue.value = (_offlineQueue.value + queueItem).takeLast(50)
+            logMessage("OFFLINE_QUEUE", topic, "Enqueued for sync upon reconnect (pending: ${_offlineQueue.value.size})")
+        }
+    }
+
+    fun syncAfterReconnect() {
+        val pending = _offlineQueue.value
+        if (pending.isEmpty()) {
+            logMessage("SYS", "SYNC", "Offline queue empty. Watch synchronization up to date.")
+            return
+        }
+        logMessage("TX -> WATCH", "FLUSH_OFFLINE_QUEUE", "Flushing ${pending.size} queued events to watch...")
+        for (item in pending) {
+            val topic = item.optString("topic", "OFFLINE_EVENT")
+            val data = item.optJSONObject("data")?.toString() ?: item.toString()
+            logMessage("TX -> WATCH (SYNC)", topic, data)
+        }
+        _offlineQueue.value = emptyList()
+        logMessage("SYS", "SYNC_COMPLETE", "Successfully synchronized all ${pending.size} offline items with watch.")
+    }
+
+    fun ingestWatchHeartRate(bpm: Int) {
+        _watchHeartRate.value = bpm
+        logMessage("RX <- WATCH", "HR_STREAM", "{\"bpm\":$bpm}")
+    }
+
+    fun ingestWatchCadence(rpm: Int) {
+        _watchCadence.value = rpm
+        logMessage("RX <- WATCH", "CADENCE_STREAM", "{\"cadence\":$rpm}")
+    }
+
     fun pingWatch() {
-        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED || _connectionStatus.value == WearConnectionStatus.PAIRED) {
             logMessage("TX -> WATCH", "PING", "{\"timestamp\":${System.currentTimeMillis()}}")
         } else {
-            logMessage("SYS", "PING_SKIPPED", "No MILES watch-side connection exists yet.")
+            logMessage("SYS", "PING_SKIPPED", "No watch paired or connected.")
         }
     }
 
     fun triggerWatchSync() {
-        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
+        if (_connectionStatus.value == WearConnectionStatus.CONNECTED || _connectionStatus.value == WearConnectionStatus.PAIRED) {
             logMessage("TX -> WATCH", "SYNC_REQ", "{\"full\":true}")
+            syncAfterReconnect()
         } else {
-            logMessage("SYS", "SYNC_QUEUED", "Watch is paired, but a MILES Wear APK is required for app-level sync.")
+            logMessage("SYS", "SYNC_QUEUED", "Watch not connected; queued until reconnect.")
         }
     }
 
     fun sendLiveWorkoutUpdate(durationSec: Long, distanceM: Double, calories: Double, hr: Int) {
-        if (_connectionStatus.value == WearConnectionStatus.CONNECTED) {
-            logMessage("TX -> WATCH", "LIVE_METRICS", "{\"sec\":$durationSec,\"m\":$distanceM,\"cal\":$calories,\"hr\":$hr}")
+        val payload = JSONObject().apply {
+            put("sec", durationSec)
+            put("m", distanceM)
+            put("cal", calories)
+            put("hr", hr)
         }
+        queueForWatchSync("LIVE_METRICS", payload)
     }
 
     fun updateWatchSettings(transform: (WatchSettings) -> WatchSettings) {

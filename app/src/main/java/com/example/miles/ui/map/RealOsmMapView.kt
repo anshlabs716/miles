@@ -105,6 +105,8 @@ fun RealOsmMapView(
     isInteractive: Boolean = true,
     showControls: Boolean = true,
     showCenterCrosshair: Boolean = false,
+    autoCenter: Boolean = true,
+    onAutoCenterChanged: ((Boolean) -> Unit)? = null,
     initialTileSource: RealOsmTileSource = RealOsmTileSource.STANDARD,
     onCenterChanged: ((Double, Double) -> Unit)? = null
 ) {
@@ -128,7 +130,7 @@ fun RealOsmMapView(
     }
     var zoomLevel by remember { mutableFloatStateOf(16f) }
     var tileSource by remember { mutableStateOf(initialTileSource) }
-    var isFollowingUser by remember { mutableStateOf(true) }
+    var isFollowingUser by remember(autoCenter) { mutableStateOf(autoCenter) }
 
     // Pulsing animation for active GPS fix
     val infiniteTransition = rememberInfiniteTransition(label = "gpsPulse")
@@ -501,10 +503,42 @@ fun RealOsmMapView(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    // Auto-Centering Toggle FAB
+                    SmallFloatingActionButton(
+                        onClick = {
+                            val next = !isFollowingUser
+                            isFollowingUser = next
+                            onAutoCenterChanged?.invoke(next)
+                            if (next) {
+                                querySystemLocation()
+                                effectiveUserLocation?.let { loc ->
+                                    centerLat = loc.latitude
+                                    centerLon = loc.longitude
+                                    onCenterChanged?.invoke(centerLat, centerLon)
+                                }
+                                Toast.makeText(context, "Auto-Centering: ON (Locks to GPS)", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Auto-Centering: OFF (Free Pan)", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        containerColor = if (isFollowingUser) Color(0xFF00E676) else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (isFollowingUser) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Navigation,
+                            contentDescription = "Toggle Auto Centering",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     // "MY LOCATION" ACTION FAB
                     FloatingActionButton(
                         onClick = {
                             isFollowingUser = true
+                            onAutoCenterChanged?.invoke(true)
                             querySystemLocation()
                             effectiveUserLocation?.let { loc ->
                                 centerLat = loc.latitude

@@ -220,6 +220,9 @@ class SmartTrackingEngine(
         val finalTitle = title?.takeIf { it.isNotBlank() }
             ?: "${current.activityType.displayName} ${java.text.SimpleDateFormat("MMM d, HH:mm", Locale.US).format(java.util.Date(startTimestamp))}"
 
+        val finalCalories = calculateCalories(current.activityType, current.elapsedSeconds, current.distanceMeters, current.stepCount).coerceAtLeast(current.calories)
+        val finalSteps = if (current.stepCount > 0) current.stepCount else (current.distanceMeters / 0.76).toInt()
+
         val entity = ActivityEntity(
             id = UUID.randomUUID().toString(),
             title = finalTitle,
@@ -228,14 +231,14 @@ class SmartTrackingEngine(
             endTime = endTs,
             durationSeconds = current.elapsedSeconds,
             distanceMeters = current.distanceMeters,
-            steps = current.stepCount,
+            steps = finalSteps,
             avgPaceSecPerKm = current.avgPaceSecPerKm,
             bestPaceSecPerKm = (current.avgPaceSecPerKm * 0.9).coerceAtLeast(180.0),
             avgSpeedKmh = current.avgSpeedKmh,
             maxSpeedKmh = (current.avgSpeedKmh * 1.35).coerceAtLeast(current.avgSpeedKmh),
             elevationGainM = current.elevationGainM,
             elevationLossM = current.elevationLossM,
-            calories = current.calories,
+            calories = finalCalories,
             avgHeartRate = if (current.heartRate > 0) current.heartRate else 0,
             maxHeartRate = if (current.heartRate > 0) (current.heartRate + 20) else 0,
             routePointsJson = MilesRepository.pointsToJson(current.points),
@@ -247,6 +250,17 @@ class SmartTrackingEngine(
 
         repository.saveActivity(entity)
         clearRecoveryState()
+
+        val settingsPrefs = context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
+        val curCal = settingsPrefs.getInt("today_workout_calories", 0)
+        val curMin = settingsPrefs.getInt("today_workout_duration_min", 0)
+        val curDist = settingsPrefs.getFloat("today_workout_distance_m", 0f)
+        settingsPrefs.edit()
+            .putInt("today_workout_calories", curCal + finalCalories)
+            .putInt("today_workout_duration_min", curMin + (current.elapsedSeconds / 60).toInt())
+            .putFloat("today_workout_distance_m", curDist + current.distanceMeters.toFloat())
+            .apply()
+        runCatching { com.example.miles.widget.MilesWidgetUpdater.updateAll(context) }
 
         _liveStats.value = LiveWorkoutStats(state = TrackingState.IDLE)
         return entity
@@ -551,6 +565,37 @@ class SmartTrackingEngine(
         )
     }
 
+    fun calculateCalories(activityType: ActivityType, elapsedSeconds: Long, distanceMeters: Double, steps: Int): Int {
+        val met = activityType.metScore
+        val timeCals = (met * 70.0 * 3.5 / 200.0) * (elapsedSeconds / 60.0)
+        val distCals = when (activityType) {
+            ActivityType.RUNNING -> distanceMeters * 0.065
+            ActivityType.CYCLING -> distanceMeters * 0.035
+            ActivityType.HIKING -> distanceMeters * 0.055
+            else -> distanceMeters * 0.045
+        }
+        val stepCals = steps * 0.04
+        return maxOf(timeCals, distCals + stepCals).toInt().coerceAtLeast(if (elapsedSeconds > 10) 1 else 0)
+    }
+
+    fun processStepDelta(delta: Int) {
+        if (_liveStats.value.state != TrackingState.RECORDING || delta <= 0) return
+        val current = _liveStats.value
+        val newSteps = current.stepCount + delta
+        val addedDist = if (current.points.isEmpty()) delta * 0.76 else 0.0
+        val newDist = current.distanceMeters + addedDist
+        val currentCals = calculateCalories(current.activityType, current.elapsedSeconds, newDist, newSteps)
+        _liveStats.value = current.copy(
+            stepCount = newSteps,
+            distanceMeters = newDist,
+            calories = currentCals
+        )
+    }
+
+    fun setActiveSource(source: String) {
+        _liveStats.value = _liveStats.value.copy(activeSource = source)
+    }
+
     // High-precision timer loop: Ticks at counterIntervalMs (tuneable down to 10ms and up to 10 min!)
     private fun startTimer() {
         timerJob?.cancel()
@@ -566,6 +611,7 @@ class SmartTrackingEngine(
                         (elapsedSec / targetPaceSecPerKm) * 1000.0
                     } else 0.0
                     val ghostDelta = dist - ghostExpectedDistM
+                    val liveCals = calculateCalories(_liveStats.value.activityType, (calculatedMillis / 1000L), dist, _liveStats.value.stepCount)
 
                     // Interval workout progression tick (once per second)
                     if (activeIntervals.isNotEmpty() && now - lastIntervalSecondTick >= 1000L) {
@@ -598,7 +644,8 @@ class SmartTrackingEngine(
 
                     _liveStats.value = _liveStats.value.copy(
                         elapsedMillis = calculatedMillis,
-                        ghostDeltaDistanceM = ghostDelta
+                        ghostDeltaDistanceM = ghostDelta,
+                        calories = liveCals
                     )
                 }
             }

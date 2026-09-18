@@ -75,17 +75,22 @@ import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.model.WaypointType
 import com.example.miles.data.repository.format
+import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.SmartTrackingEngine
 import com.example.miles.engine.TrackingState
 import com.example.miles.ui.map.MapStyleMode
 import com.example.miles.ui.map.MilesMapCanvas
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
+import com.example.miles.wear.WearCompanionManager
+import com.example.miles.wear.WearConnectionStatus
 import kotlinx.coroutines.launch
 
 @Composable
 fun WorkoutHudScreen(
     smartEngine: SmartTrackingEngine,
+    wearCompanion: WearCompanionManager? = null,
+    deviceManager: DeviceManager? = null,
     onFinishWorkout: (ActivityEntity) -> Unit,
     onDiscardWorkout: () -> Unit,
     onBack: () -> Unit = {}
@@ -771,6 +776,69 @@ fun PrimaryHudPage(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Second Metrics Row: Calories, Steps, Source
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "CALORIES",
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = "${liveStats.calories}",
+                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFFFF9100)
+                            )
+                            Text(
+                                text = " kcal",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+                    }
+
+                    Column {
+                        Text(
+                            text = "STEPS",
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = "${liveStats.stepCount}",
+                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF00E5FF)
+                            )
+                            Text(
+                                text = " steps",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+                    }
+
+                    Column {
+                        Text(
+                            text = "TRACKING FEED",
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = liveStats.activeSource,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
 
@@ -785,6 +853,7 @@ fun PrimaryHudPage(
                 points = liveStats.points,
                 waypoints = liveStats.waypoints,
                 userLocation = liveStats.points.lastOrNull(),
+                autoCenter = true,
                 showControls = true
             )
         }

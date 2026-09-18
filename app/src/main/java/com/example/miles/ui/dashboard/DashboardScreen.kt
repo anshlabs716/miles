@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NordicWalking
@@ -38,6 +39,12 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.ui.platform.LocalContext
+import com.example.miles.engine.DeviceSourceType
+import com.example.miles.wear.WearCompanionManager
+import com.example.miles.wear.WearConnectionStatus
+import com.example.miles.widget.MilesWidgetUpdater
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -50,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,33 +99,30 @@ fun DashboardScreen(
     userPreferences: UserPreferences,
     preferences: MilesPreferences? = null,
     pedometerManager: PedometerManager? = null,
+    wearCompanion: WearCompanionManager? = null,
     onStartActivity: (ActivityType) -> Unit,
     onNavigateToHud: () -> Unit,
     onSelectActivity: (ActivityEntity) -> Unit,
     onOpenStudio: () -> Unit
 ) {
+    val context = LocalContext.current
     val liveStats by smartEngine.liveStats.collectAsState()
     val mediaTrack by mediaIntegration.currentTrack.collectAsState()
     val pedometerSteps by (pedometerManager?.todaySteps?.collectAsState() ?: remember { mutableIntStateOf(0) })
+    val currentBpm by deviceManager.heartRateBpm.collectAsState()
+    val hasHrCap by deviceManager.hasHeartRateCapability.collectAsState()
+    val deviceSources by deviceManager.sources.collectAsState()
+    val wearStatus by (wearCompanion?.connectionStatus?.collectAsState() ?: remember { mutableStateOf(WearConnectionStatus.DISCONNECTED) })
+    val isWatchConnected = wearStatus == WearConnectionStatus.CONNECTED || deviceSources.any { it.type == DeviceSourceType.WEAR_OS_SENSOR && it.isConnected }
+    val hasHeartRateDevice = hasHrCap || (currentBpm != null && currentBpm!! > 0) || isWatchConnected
+
     val todayStart = rememberTodayStartTimestamp()
     val todayActivities = activities.filter { it.startTime >= todayStart }
     val workoutSteps = todayActivities.sumOf { it.steps }
     val rawSteps = maxOf(pedometerSteps, workoutSteps)
     val animatedStepCounter = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        animatedStepCounter.snapTo(0f)
-        animatedStepCounter.animateTo(
-            targetValue = rawSteps.toFloat(),
-            animationSpec = tween(durationMillis = 1800, easing = FastOutSlowInEasing)
-        )
-    }
     LaunchedEffect(rawSteps) {
-        if (animatedStepCounter.value != rawSteps.toFloat()) {
-            animatedStepCounter.animateTo(
-                targetValue = rawSteps.toFloat(),
-                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing)
-            )
-        }
+        animatedStepCounter.animateTo(rawSteps.toFloat(), tween(1400, easing = FastOutSlowInEasing))
     }
     val todaySteps = animatedStepCounter.value.toInt()
     val todayDistanceM = todayActivities.sumOf { it.distanceMeters }
@@ -125,9 +130,33 @@ fun DashboardScreen(
     val todayDistanceDisplay = if (isMetric) todayDistanceM / 1000.0 else todayDistanceM * 0.000621371
     val unitLabel = if (isMetric) "km" else "mi"
     val todayDurationMin = todayActivities.sumOf { it.durationSeconds } / 60
-    val todayCalories = todayActivities.sumOf { it.calories }
+    val workoutCalories = todayActivities.sumOf { it.calories }
+
+    // Enhanced calorie estimation: base step burn + workout calories.
+    // When watch or heart-rate sensor is paired, calorie burn integrates elevated physiological exertion!
+    val hrFactor = if (isWatchConnected && currentBpm != null && currentBpm!! > 90) 1.25f else 1.0f
+    val stepCalories = (todaySteps * 0.045f * hrFactor).toInt()
+    val totalCalories = maxOf(workoutCalories, stepCalories + workoutCalories)
+    val calorieGoal = 500.coerceAtLeast(100)
     val stepGoal = userPreferences.dailyStepGoal.coerceAtLeast(1000)
     val activeMinGoal = userPreferences.dailyActiveMinutesGoal.coerceAtLeast(10)
+
+    // Synchronize data with home screen widgets
+    LaunchedEffect(totalCalories, calorieGoal, todaySteps, stepGoal, todayDurationMin, activeMinGoal, currentBpm, isWatchConnected, liveStats.state) {
+        MilesWidgetUpdater.updateAllWidgets(
+            context = context,
+            calories = totalCalories,
+            calGoal = calorieGoal,
+            steps = todaySteps,
+            stepGoal = stepGoal,
+            activeMin = todayDurationMin.toInt(),
+            activeGoal = activeMinGoal,
+            hrBpm = currentBpm,
+            isWatchConnected = isWatchConnected,
+            isRecording = liveStats.state == TrackingState.RECORDING,
+            sportName = liveStats.activityType.displayName
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
@@ -141,15 +170,28 @@ fun DashboardScreen(
                         Icon(Icons.AutoMirrored.Filled.DirectionsRun, "App Icon", tint = Color.White, modifier = Modifier.size(22.dp))
                     }
                     Spacer(Modifier.width(10.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                         val greeting = when { hour < 12 -> "Good morning"; hour < 17 -> "Good afternoon"; else -> "Good evening" }
                         val namePart = if (userPreferences.userName.isNotBlank()) ", ${userPreferences.userName}" else ""
-                        Text("$greeting$namePart", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black), color = MaterialTheme.colorScheme.onBackground)
-                        Text(SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("$greeting$namePart", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black), color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
+                        Text(SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                FilledTonalButton(onClick = onOpenStudio, shape = RoundedCornerShape(16.dp)) { Text("Studio", fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.width(8.dp))
+                FilledTonalButton(
+                    onClick = onOpenStudio,
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Studio",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Studio", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
             }
         }
 
@@ -174,12 +216,26 @@ fun DashboardScreen(
                 Column(Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("TODAY'S ACTIVITY", style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(20.dp))
-                    GoogleFitActivityRings(todaySteps, stepGoal, todayDurationMin.toInt(), activeMinGoal)
+                    GoogleFitActivityRings(
+                        calories = totalCalories,
+                        calorieGoal = calorieGoal,
+                        activeMinutes = todayDurationMin.toInt(),
+                        activeMinGoal = activeMinGoal,
+                        steps = todaySteps,
+                        stepGoal = stepGoal,
+                        heartRateBpm = currentBpm,
+                        hasHeartRateDevice = hasHeartRateDevice,
+                        isWatchConnected = isWatchConnected
+                    )
                     Spacer(Modifier.height(24.dp))
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+                        MetricPill(Icons.Default.LocalFireDepartment, "$totalCalories", "kcal")
                         MetricPill(Icons.Default.Timer, "$todayDurationMin", "min")
                         MetricPill(Icons.Default.Route, todayDistanceDisplay.format(2), unitLabel)
-                        MetricPill(Icons.Default.LocalFireDepartment, "$todayCalories", "kcal")
+                        if (hasHeartRateDevice) {
+                            val hrText = if (currentBpm != null && currentBpm!! > 0) "$currentBpm" else "--"
+                            MetricPill(Icons.Default.Favorite, hrText, "bpm")
+                        }
                     }
                 }
             }
@@ -247,26 +303,150 @@ fun DashboardScreen(
 }
 
 @Composable
-fun GoogleFitActivityRings(steps: Int, stepGoal: Int, activeMinutes: Int, activeMinGoal: Int) {
-    val stepProgress = (steps.toFloat() / stepGoal).coerceIn(0f, 1f)
+fun GoogleFitActivityRings(
+    calories: Int,
+    calorieGoal: Int,
+    activeMinutes: Int,
+    activeMinGoal: Int,
+    steps: Int,
+    stepGoal: Int,
+    heartRateBpm: Int?,
+    hasHeartRateDevice: Boolean,
+    isWatchConnected: Boolean = false
+) {
+    val calProgress = (calories.toFloat() / calorieGoal).coerceIn(0f, 1f)
     val activeProgress = (activeMinutes.toFloat() / activeMinGoal).coerceIn(0f, 1f)
-    val animatedSteps by animateFloatAsState(stepProgress, tween(1000, easing = FastOutSlowInEasing), label = "stepProgress")
+    val stepProgress = (steps.toFloat() / stepGoal).coerceIn(0f, 1f)
+    val hrProgress = if (heartRateBpm != null && heartRateBpm > 40) {
+        ((heartRateBpm - 40).toFloat() / 140f).coerceIn(0.1f, 1f)
+    } else {
+        0.35f
+    }
+
+    val animatedCal by animateFloatAsState(calProgress, tween(1000, easing = FastOutSlowInEasing), label = "calProgress")
     val animatedMinutes by animateFloatAsState(activeProgress, tween(1000, easing = FastOutSlowInEasing), label = "minProgress")
-    Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+    val animatedSteps by animateFloatAsState(stepProgress, tween(1000, easing = FastOutSlowInEasing), label = "stepProgress")
+    val animatedHr by animateFloatAsState(if (hasHeartRateDevice) hrProgress else 0f, tween(800, easing = FastOutSlowInEasing), label = "hrProgress")
+
+    val ringSize = if (hasHeartRateDevice) 210.dp else 195.dp
+    val strokeWidth = if (hasHeartRateDevice) 10.dp else 13.dp
+    val strokeGap = 4.dp
+
+    Box(Modifier.size(ringSize), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val stroke = 14.dp.toPx()
-            val outer = (size.minDimension - stroke) / 2f
-            val inner = outer - stroke - 6.dp.toPx()
+            val stroke = strokeWidth.toPx()
+            val gap = strokeGap.toPx()
             val center = Offset(size.width / 2f, size.height / 2f)
-            drawCircle(Color(0xFF00E676).copy(alpha = .15f), outer, center, style = Stroke(stroke))
-            if (animatedMinutes > 0) drawArc(Color(0xFF00E676), -90f, animatedMinutes * 360f, false, Offset(center.x - outer, center.y - outer), Size(outer * 2, outer * 2), style = Stroke(stroke, cap = StrokeCap.Round))
-            drawCircle(Color(0xFF00B0FF).copy(alpha = .15f), inner, center, style = Stroke(stroke))
-            if (stepProgress > 0) drawArc(Color(0xFF00B0FF), -90f, stepProgress * 360f, false, Offset(center.x - inner, center.y - inner), Size(inner * 2, inner * 2), style = Stroke(stroke, cap = StrokeCap.Round))
+
+            // Ring 1 (Outermost): Calories Burned - Coral Flame (#FF5722)
+            val r1 = (size.minDimension - stroke) / 2f
+            drawCircle(Color(0xFFFF5722).copy(alpha = 0.15f), r1, center, style = Stroke(stroke))
+            if (animatedCal > 0) {
+                drawArc(
+                    color = Color(0xFFFF5722),
+                    startAngle = -90f,
+                    sweepAngle = animatedCal * 360f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - r1, center.y - r1),
+                    size = Size(r1 * 2, r1 * 2),
+                    style = Stroke(stroke, cap = StrokeCap.Round)
+                )
+            }
+
+            // Ring 2: Active Minutes - Vivid Green (#00E676)
+            val r2 = r1 - stroke - gap
+            drawCircle(Color(0xFF00E676).copy(alpha = 0.15f), r2, center, style = Stroke(stroke))
+            if (animatedMinutes > 0) {
+                drawArc(
+                    color = Color(0xFF00E676),
+                    startAngle = -90f,
+                    sweepAngle = animatedMinutes * 360f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - r2, center.y - r2),
+                    size = Size(r2 * 2, r2 * 2),
+                    style = Stroke(stroke, cap = StrokeCap.Round)
+                )
+            }
+
+            // Ring 3: Steps - Neon Cyan (#00B0FF)
+            val r3 = r2 - stroke - gap
+            drawCircle(Color(0xFF00B0FF).copy(alpha = 0.15f), r3, center, style = Stroke(stroke))
+            if (animatedSteps > 0) {
+                drawArc(
+                    color = Color(0xFF00B0FF),
+                    startAngle = -90f,
+                    sweepAngle = animatedSteps * 360f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - r3, center.y - r3),
+                    size = Size(r3 * 2, r3 * 2),
+                    style = Stroke(stroke, cap = StrokeCap.Round)
+                )
+            }
+
+            // Ring 4 (Innermost): Heart Rate BPM - Crimson Flame (#FF1744)
+            // USER DIRECTIVE: "and add bpm but if no watch paired or device that can check bpm no ring for bpm"
+            if (hasHeartRateDevice) {
+                val r4 = r3 - stroke - gap
+                drawCircle(Color(0xFFFF1744).copy(alpha = 0.15f), r4, center, style = Stroke(stroke))
+                if (animatedHr > 0) {
+                    drawArc(
+                        color = Color(0xFFFF1744),
+                        startAngle = -90f,
+                        sweepAngle = animatedHr * 360f,
+                        useCenter = false,
+                        topLeft = Offset(center.x - r4, center.y - r4),
+                        size = Size(r4 * 2, r4 * 2),
+                        style = Stroke(stroke, cap = StrokeCap.Round)
+                    )
+                }
+            }
         }
+
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(String.format(Locale.getDefault(), "%,d", steps), style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black))
-            Text("of ${String.format(Locale.getDefault(), "%,d", stepGoal)} steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${activeMinutes}m active", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Color(0xFF00E676))
+            // Main hero number: STEPS COUNT (large primary display)
+            Text(
+                text = String.format(Locale.getDefault(), "%,d", steps),
+                style = MaterialTheme.typography.displaySmall.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-0.5).sp
+                ),
+                color = Color(0xFF00B0FF)
+            )
+            Text(
+                text = "of ${String.format(Locale.getDefault(), "%,d", stepGoal)} steps",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(3.dp))
+            // Calories burned clearly displayed alongside active minutes
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "🔥 ${String.format(Locale.getDefault(), "%,d", calories)}",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF5722)
+                    )
+                )
+                Text(
+                    text = " / ${String.format(Locale.getDefault(), "%,d", calorieGoal)} kcal",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = " • ${activeMinutes}m",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color(0xFF00E676)
+                )
+            }
+            if (hasHeartRateDevice) {
+                Spacer(Modifier.height(3.dp))
+                val hrDisplay = if (heartRateBpm != null && heartRateBpm > 0) "$heartRateBpm bpm" else if (isWatchConnected) "Watch Linked" else "HR Ready"
+                Text(
+                    text = "❤️ $hrDisplay",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFFFF1744)
+                )
+            }
         }
     }
 }

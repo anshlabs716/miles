@@ -38,6 +38,8 @@ class PedometerManager(
     private val _sensorAvailable = MutableStateFlow(false)
     val sensorAvailable: StateFlow<Boolean> = _sensorAvailable.asStateFlow()
 
+    var onStepDetected: ((delta: Int) -> Unit)? = null
+
     private var stepCounterSensor: Sensor? = null
     private var stepDetectorSensor: Sensor? = null
     private var accelSensor: Sensor? = null
@@ -85,6 +87,7 @@ class PedometerManager(
             .putInt(KEY_TODAY_STEPS, safe)
             .putFloat(KEY_LAST_COUNTER, lastCounterValue)
             .apply()
+        runCatching { com.example.miles.widget.MilesWidgetUpdater.updateAll(context) }
     }
 
     private fun setupSensors() {
@@ -163,7 +166,10 @@ class PedometerManager(
         if (nowDate != todayDate) loadTodayState()
         when (event.sensor.type) {
             Sensor.TYPE_STEP_COUNTER -> handleStepCounter(event.values.firstOrNull() ?: return)
-            Sensor.TYPE_STEP_DETECTOR -> if ((event.values.firstOrNull() ?: 0f) >= 1f) persistSteps(_todaySteps.value + 1)
+            Sensor.TYPE_STEP_DETECTOR -> if ((event.values.firstOrNull() ?: 0f) >= 1f) {
+                persistSteps(_todaySteps.value + 1)
+                onStepDetected?.invoke(1)
+            }
             Sensor.TYPE_ACCELEROMETER -> handleAccelerometer(event)
         }
     }
@@ -183,7 +189,10 @@ class PedometerManager(
             return
         }
         val delta = (totalSinceBoot - lastCounterValue).toInt().coerceAtLeast(0)
-        if (delta > 0) persistSteps(_todaySteps.value + delta)
+        if (delta > 0) {
+            persistSteps(_todaySteps.value + delta)
+            onStepDetected?.invoke(delta)
+        }
         lastCounterValue = totalSinceBoot
         prefs.edit().putFloat(KEY_LAST_COUNTER, lastCounterValue).apply()
     }
@@ -199,6 +208,7 @@ class PedometerManager(
         if (magnitude - lastMagnitude > threshold && now - lastStepTimeMs >= 300L) {
             lastStepTimeMs = now
             persistSteps(_todaySteps.value + 1)
+            onStepDetected?.invoke(1)
         }
         lastMagnitude = magnitude
     }
