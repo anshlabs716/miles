@@ -3,7 +3,7 @@
 ### A modern, customizable, privacy-focused activity tracker for Android.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/STATUS-BETA-orange?style=for-the-badge" alt="Beta">
+  <img src="https://img.shields.io/badge/STATUS-1.0.1-success?style=for-the-badge" alt="Version 1.0.1">
   <img src="https://img.shields.io/badge/DEVELOPMENT-ACTIVE-yellow?style=for-the-badge" alt="Active Development">
   <img src="https://img.shields.io/badge/PLATFORM-ANDROID-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
   <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
@@ -21,7 +21,7 @@
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portable data, customization, and a clean UI.
 
-> **Status:** Beta / active development. The project is not a stable release yet.
+> **Status:** Version 1.0.1 — first official APK release.
 
 ## What MILES is built to do
 
@@ -388,7 +388,7 @@ MILES does not replace the user's music application.
 
 ## Wear OS
 
-The **Wear OS APK is intentionally not included in the current overhaul.**
+The **Wear OS APK is not included in MILES 1.0.1 yet.**
 
 The phone app can prepare for Wear OS by:
 
@@ -399,7 +399,7 @@ The phone app can prepare for Wear OS by:
 
 Full MILES-specific watch synchronization, watch recording, watch complications, Tiles, and watch-side sensors require the future Wear OS application.
 
-**Wear OS APK: planned for a later phase.**
+**Wear OS APK ETA: Q4 2026.** This is a target, not a guaranteed release date.
 
 ---
 
@@ -479,7 +479,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 | Area | Status |
 | --- | --- |
-| Android phone/tablet app | In active development |
+| Android phone/tablet app | **1.0.1 released** |
 | Real step engine | Implemented; hardware validation required |
 | Real GPS engine | Implemented; hardware validation required |
 | Background tracking | Implemented foundation; hardening/testing ongoing |
@@ -502,8 +502,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | Icon switching | Code implemented; launcher testing required |
 | Predictive back | In development |
 | Phone-side Wear detection | Implemented foundation |
-| Wear OS APK | Planned later |
-| Stable release | Not available |
+| Wear OS APK | **Planned — ETA Q4 2026** |
+| Stable release | **1.0.1 released** |
 
 ---
 
