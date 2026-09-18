@@ -21,6 +21,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -76,6 +78,25 @@ class DeviceManager(private val context: Context) {
 
     private val _lastBleError = MutableStateFlow<String?>(null)
     val lastBleError: StateFlow<String?> = _lastBleError.asStateFlow()
+
+    val pairedWatch: StateFlow<ConnectedSource?> =
+        _sources
+            .map { list ->
+                list.firstOrNull {
+                    it.type == DeviceSourceType.WEAR_OS_SENSOR && it.isConnected
+                }
+            }
+            .stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+
+    fun refreshPairedDevices() {
+        checkBondedDevices()
+        if (!_isScanning.value) scanForNearbySensors()
+    }
+
+    fun onWatchHeartRateReceived(bpm: Int) {
+        _heartRateBpm.value = bpm.coerceIn(20, 240)
+        _hasHeartRateCapability.value = true
+    }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
