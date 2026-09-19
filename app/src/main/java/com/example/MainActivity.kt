@@ -138,10 +138,11 @@ class MainActivity : ComponentActivity() {
                     healthConnectPermissionsLauncher.launch(healthConnectManager.permissions)
                 }
             }
-            val openHealthConnectSettings = {
+            val openHealthConnectSettings: () -> Unit = {
                 healthConnectManager.manageDataIntent()?.let { settingsIntent ->
                     runCatching { startActivity(settingsIntent) }
                 }
+                Unit
             }
             LaunchedEffect(Unit) {
                 healthConnectState = healthConnectManager.connectionState()
