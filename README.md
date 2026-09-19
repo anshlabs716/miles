@@ -3,7 +3,7 @@
 ### A modern, customizable, privacy-focused activity tracker for Android.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/STATUS-1.0.1-success?style=for-the-badge" alt="Version 1.0.1">
+  <img src="https://img.shields.io/badge/STATUS-1.0.2-success?style=for-the-badge" alt="Version 1.0.2">
   <img src="https://img.shields.io/badge/DEVELOPMENT-ACTIVE-yellow?style=for-the-badge" alt="Active Development">
   <img src="https://img.shields.io/badge/PLATFORM-ANDROID-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
   <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
