@@ -37,8 +37,25 @@ class HealthConnectManager(context: Context) {
 
     /** MILES only requests and reads the two record types it currently uses. */
     val permissions: Set<String> = setOf(
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(CyclingPedalingCadenceRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(ElevationGainedRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
+        HealthPermission.getReadPermission(PowerRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+        HealthPermission.getReadPermission(SleepSessionRecord::class),
+        HealthPermission.getReadPermission(SpeedRecord::class),
+        HealthPermission.getReadPermission(StepsCadenceRecord::class),
         HealthPermission.getReadPermission(StepsRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(Vo2MaxRecord::class),
+        HealthPermission.getReadPermission(WeightRecord::class)
     )
 
     private fun clientOrNull(): HealthConnectClient? {
