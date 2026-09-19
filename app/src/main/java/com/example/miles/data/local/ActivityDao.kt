@@ -16,6 +16,9 @@ interface ActivityDao {
     @Query("SELECT * FROM activities WHERE isDeleted = 0 ORDER BY startTime DESC")
     suspend fun getAllActivitiesOnce(): List<ActivityEntity>
 
+    @Query("SELECT * FROM activities ORDER BY startTime DESC")
+    suspend fun getAllActivitiesIncludingTrashOnce(): List<ActivityEntity>
+
     @Query("SELECT * FROM activities WHERE isDeleted = 0 AND isFavorite = 1 ORDER BY startTime DESC")
     fun getFavoriteActivities(): Flow<List<ActivityEntity>>
 

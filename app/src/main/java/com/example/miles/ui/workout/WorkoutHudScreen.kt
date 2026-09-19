@@ -75,22 +75,17 @@ import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.model.WaypointType
 import com.example.miles.data.repository.format
-import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.SmartTrackingEngine
 import com.example.miles.engine.TrackingState
 import com.example.miles.ui.map.MapStyleMode
 import com.example.miles.ui.map.MilesMapCanvas
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
-import com.example.miles.wear.WearCompanionManager
-import com.example.miles.wear.WearConnectionStatus
 import kotlinx.coroutines.launch
 
 @Composable
 fun WorkoutHudScreen(
     smartEngine: SmartTrackingEngine,
-    wearCompanion: WearCompanionManager? = null,
-    deviceManager: DeviceManager? = null,
     onFinishWorkout: (ActivityEntity) -> Unit,
     onDiscardWorkout: () -> Unit,
     onBack: () -> Unit = {}

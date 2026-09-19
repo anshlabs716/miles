@@ -244,7 +244,13 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onOpenStudio = { subScreen = MilesSubScreen.STUDIO }
                                         )
-                                        MilesNavigationTab.JOURNAL -> JournalScreen(activities = activities, repository = repository, onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } })
+                                        MilesNavigationTab.JOURNAL -> JournalScreen(
+                                            activities = activities,
+                                            repository = repository,
+                                            preferences = preferences,
+                                            onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL },
+                                            onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } }
+                                        )
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP })

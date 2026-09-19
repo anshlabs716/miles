@@ -684,4 +684,25 @@ class MilesPreferences(context: Context) {
         prefs.edit().clear().apply()
         _userPreferences.value = loadPreferences()
     }
+
+    fun exportRawPreferences(): Map<String, *> = prefs.all.toMap()
+
+    fun importRawPreferences(values: org.json.JSONObject) {
+        val editor = prefs.edit().clear()
+        val keys = values.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            when (val value = values.get(key)) {
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Double -> editor.putFloat(key, value.toFloat())
+                is Float -> editor.putFloat(key, value)
+                is String -> editor.putString(key, value)
+                else -> editor.putString(key, value.toString())
+            }
+        }
+        editor.apply()
+        _userPreferences.value = loadPreferences()
+    }
 }
