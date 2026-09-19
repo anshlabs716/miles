@@ -93,6 +93,7 @@ import com.example.miles.data.local.ColorVisionMode
 import com.example.miles.data.local.DistanceUnit
 import com.example.miles.data.local.MilesPreferences
 import com.example.miles.data.local.PetType
+import com.example.miles.health.HealthConnectConnectionState
 import com.example.miles.data.model.PrivacyZoneEntity
 import com.example.miles.data.repository.MilesRepository
 import com.example.miles.data.repository.format
@@ -120,7 +121,11 @@ fun SettingsScreen(
     repository: MilesRepository,
     onOpenStudio: () -> Unit,
     onOpenDevices: () -> Unit = {},
-    onRerunSetup: () -> Unit = {}
+    onRerunSetup: () -> Unit = {},
+    healthConnectState: HealthConnectConnectionState = HealthConnectConnectionState.UNAVAILABLE,
+    onRequestHealthConnectPermissions: () -> Unit = {},
+    onOpenHealthConnectSettings: () -> Unit = {},
+    canOpenHealthConnectSettings: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -682,7 +687,19 @@ fun SettingsScreen(
                 }
             }
 
-            // 8. PRIVACY, DATA & EXPORTS
+            // 8. HEALTH CONNECT
+            if (shouldShow(SettingsCategory.SENSORS, "health connect", "health", "fitness data", "workout data", "sleep", "recovery")) {
+                item {
+                    HealthConnectSettingsCard(
+                        state = healthConnectState,
+                        onRequestPermissions = onRequestHealthConnectPermissions,
+                        onOpenSettings = onOpenHealthConnectSettings,
+                        canOpenSettings = canOpenHealthConnectSettings
+                    )
+                }
+            }
+
+            // 9. PRIVACY, DATA & EXPORTS
             if (shouldShow(SettingsCategory.PRIVACY, "privacy", "zone", "backup", "trash", "restore", "wipe", "reset", "export", "sqlite")) {
                 item {
                     PrivacySettingsCard(
@@ -703,7 +720,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 9. MILES STUDIO PROMINENT CARD
+            // 10. MILES STUDIO PROMINENT CARD
             if (shouldShow(SettingsCategory.STUDIO, "studio", "kalman", "gnss", "developer", "math", "vdot", "nmea", "telemetry")) {
                 item {
                     StudioShortcutCard(onOpenStudio = onOpenStudio)
@@ -783,6 +800,43 @@ fun SettingsScreen(
                     Toast.makeText(context, "Pet & Rest Day settings saved!", Toast.LENGTH_SHORT).show()
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun HealthConnectSettingsCard(
+    state: HealthConnectConnectionState,
+    onRequestPermissions: () -> Unit,
+    onOpenSettings: () -> Unit,
+    canOpenSettings: Boolean
+) {
+    val (status, description) = when (state) {
+        HealthConnectConnectionState.CONNECTED -> "Connected" to "MILES can read your steps and exercise sessions. Health data stays on this device."
+        HealthConnectConnectionState.AVAILABLE_NOT_PERMITTED -> "Available but not permitted" to "Optional access lets MILES import steps and exercise sessions. MILES works fully without it."
+        HealthConnectConnectionState.PROVIDER_UPDATE_REQUIRED -> "Needs Update" to "The Health Connect provider needs an update. MILES works fully without Health Connect."
+        HealthConnectConnectionState.UNAVAILABLE -> "Unavailable" to "No working Health Connect provider was found. Some custom or de-Googled ROMs do not include one; MILES works fully without it."
+    }
+    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text("HEALTH CONNECT", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                    Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(description, style = MaterialTheme.typography.bodyMedium)
+            if (state == HealthConnectConnectionState.AVAILABLE_NOT_PERMITTED) {
+                Spacer(modifier = Modifier.height(12.dp))
+                FilledTonalButton(onClick = onRequestPermissions) { Text("Grant Health Connect access") }
+            }
+            if (canOpenSettings) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(onClick = onOpenSettings) { Text("Open Health Connect settings") }
+            }
         }
     }
 }

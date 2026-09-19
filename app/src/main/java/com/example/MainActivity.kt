@@ -62,6 +62,9 @@ import com.example.miles.engine.MoveReminderManager
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
 import com.example.miles.engine.TrackingForegroundService
+import com.example.miles.health.HealthConnectConnectionState
+import com.example.miles.health.HealthConnectAvailability
+import com.example.miles.health.HealthConnectManager
 import com.example.miles.engine.TrackingState
 import com.example.miles.ui.dashboard.DashboardScreen
 import com.example.miles.ui.devices.DevicesScreen
@@ -95,6 +98,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var locationTracker: com.example.miles.engine.LocationTracker
     private lateinit var pedometerManager: PedometerManager
     private lateinit var moveReminderManager: MoveReminderManager
+    private lateinit var healthConnectManager: HealthConnectManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +113,7 @@ class MainActivity : ComponentActivity() {
         locationTracker = com.example.miles.engine.LocationTracker(this)
         pedometerManager = PedometerManager(this, preferences)
         moveReminderManager = MoveReminderManager(this, preferences)
+        healthConnectManager = HealthConnectManager(this)
         moveReminderManager.scheduleNextReminder()
 
         setContent {
@@ -118,6 +123,29 @@ class MainActivity : ComponentActivity() {
             val powerManager = remember { getSystemService(Context.POWER_SERVICE) as? PowerManager }
             var showBatteryOptDialog by remember { mutableStateOf(powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) }
 
+            var healthConnectState by remember { mutableStateOf(HealthConnectConnectionState.UNAVAILABLE) }
+            val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
+                androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
+            ) { grantedPermissions ->
+                healthConnectState = if (grantedPermissions.containsAll(healthConnectManager.permissions)) {
+                    HealthConnectConnectionState.CONNECTED
+                } else {
+                    HealthConnectConnectionState.AVAILABLE_NOT_PERMITTED
+                }
+            }
+            val requestHealthConnectPermissions = {
+                if (healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
+                    healthConnectPermissionsLauncher.launch(healthConnectManager.permissions)
+                }
+            }
+            val openHealthConnectSettings = {
+                healthConnectManager.manageDataIntent()?.let { settingsIntent ->
+                    runCatching { startActivity(settingsIntent) }
+                }
+            }
+            LaunchedEffect(Unit) {
+                healthConnectState = healthConnectManager.connectionState()
+            }
             val allPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
                 val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
@@ -126,6 +154,23 @@ class MainActivity : ComponentActivity() {
                     locationTracker.startTracking(intervalMs = userPrefs.sensorRefreshRateMs, gpsEnabled = userPrefs.gpsSensorEnabled) { point ->
                         if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
                     }
+                }
+                // Health Connect is optional. On first boot, ask only when its provider is available.
+                if (!userPrefs.healthConnectFirstBootHandled) {
+                    when (healthConnectManager.availability) {
+                        HealthConnectAvailability.AVAILABLE -> requestHealthConnectPermissions()
+                        HealthConnectAvailability.UNAVAILABLE -> Toast.makeText(
+                            this@MainActivity,
+                            "Health Connect is unavailable. MILES works fully without it.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        HealthConnectAvailability.PROVIDER_UPDATE_REQUIRED -> Toast.makeText(
+                            this@MainActivity,
+                            "Health Connect needs an update. MILES works fully without it.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    preferences.markHealthConnectFirstBootHandled()
                 }
             }
 
@@ -253,7 +298,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
-                                        MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP })
+                                        MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP }, healthConnectState = healthConnectState, onRequestHealthConnectPermissions = requestHealthConnectPermissions, onOpenHealthConnectSettings = openHealthConnectSettings, canOpenHealthConnectSettings = healthConnectManager.manageDataIntent() != null)
                                     }
                                 }
                             }
