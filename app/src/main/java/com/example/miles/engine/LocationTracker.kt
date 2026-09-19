@@ -10,18 +10,11 @@ import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.example.miles.data.model.GpsPoint
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class LocationTracker(private val context: Context) {
-    private val fusedClient = LocationServices.getFusedLocationProviderClient(context)
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
     private val _currentLocation = MutableStateFlow<GpsPoint?>(null)
     val currentLocation: StateFlow<GpsPoint?> = _currentLocation.asStateFlow()
@@ -31,7 +24,6 @@ class LocationTracker(private val context: Context) {
     val gpsAvailable: StateFlow<Boolean> = _gpsAvailable.asStateFlow()
     private val _status = MutableStateFlow("GPS waiting for permission")
     val status: StateFlow<String> = _status.asStateFlow()
-    private var callback: LocationCallback? = null
     private var listenerRegistered = false
     private var updateCallback: ((GpsPoint) -> Unit)? = null
     private var intervalMs = 1000L
@@ -87,30 +79,7 @@ class LocationTracker(private val context: Context) {
         }
 
         stopTracking(clearCallback = false)
-        try {
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, this.intervalMs)
-                .setMinUpdateIntervalMillis((this.intervalMs / 2L).coerceAtLeast(250L))
-                .setMinUpdateDistanceMeters(0.5f)
-                .setWaitForAccurateLocation(false)
-                .build()
-            val newCallback = object : LocationCallback() {
-                override fun onLocationResult(result: LocationResult) {
-                    result.locations.forEach(::processLocation)
-                }
-            }
-            callback = newCallback
-            fusedClient.requestLocationUpdates(request, newCallback, Looper.getMainLooper())
-            fusedClient.lastLocation.addOnSuccessListener { it?.let(::processLocation) }
-            listenerRegistered = true
-            _isTrackingLocation.value = true
-            _gpsAvailable.value = true
-            _status.value = "GPS tracking active • " + this.intervalMs + " ms"
-        } catch (_: SecurityException) {
-            _isTrackingLocation.value = false
-            _status.value = "GPS permission required"
-        } catch (_: Exception) {
-            startLocationManagerFallback()
-        }
+        startLocationManagerFallback()
     }
 
     private fun startLocationManagerFallback() {
@@ -157,8 +126,6 @@ class LocationTracker(private val context: Context) {
     }
 
     fun stopTracking(clearCallback: Boolean = true) {
-        callback?.let { runCatching { fusedClient.removeLocationUpdates(it) } }
-        callback = null
         runCatching { locationManager?.removeUpdates(fallbackListener) }
         listenerRegistered = false
         _isTrackingLocation.value = false
