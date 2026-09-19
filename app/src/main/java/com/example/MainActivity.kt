@@ -62,6 +62,7 @@ import com.example.miles.engine.MoveReminderManager
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
 import com.example.miles.engine.TrackingForegroundService
+import com.example.miles.health.HealthConnectManager
 import com.example.miles.engine.TrackingState
 import com.example.miles.ui.dashboard.DashboardScreen
 import com.example.miles.ui.devices.DevicesScreen
@@ -95,6 +96,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var locationTracker: com.example.miles.engine.LocationTracker
     private lateinit var pedometerManager: PedometerManager
     private lateinit var moveReminderManager: MoveReminderManager
+    private lateinit var healthConnectManager: HealthConnectManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +111,7 @@ class MainActivity : ComponentActivity() {
         locationTracker = com.example.miles.engine.LocationTracker(this)
         pedometerManager = PedometerManager(this, preferences)
         moveReminderManager = MoveReminderManager(this, preferences)
+        healthConnectManager = HealthConnectManager(this)
         moveReminderManager.scheduleNextReminder()
 
         setContent {
@@ -118,6 +121,14 @@ class MainActivity : ComponentActivity() {
             val powerManager = remember { getSystemService(Context.POWER_SERVICE) as? PowerManager }
             var showBatteryOptDialog by remember { mutableStateOf(powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) }
 
+            val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
+                androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
+            ) { }
+            val requestHealthConnectPermissions = {
+                if (healthConnectManager.isAvailable) {
+                    healthConnectPermissionsLauncher.launch(healthConnectManager.permissions)
+                }
+            }
             val allPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
                 val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
@@ -127,6 +138,9 @@ class MainActivity : ComponentActivity() {
                         if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
                     }
                 }
+                // Health Connect uses its own system permission screen, so request it after
+                // Android's standard first-run permissions have completed.
+                requestHealthConnectPermissions()
             }
 
             LaunchedEffect(Unit) {
@@ -253,7 +267,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
-                                        MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP })
+                                        MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP }, onRequestHealthConnectPermissions = requestHealthConnectPermissions)
                                     }
                                 }
                             }

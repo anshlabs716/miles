@@ -120,7 +120,8 @@ fun SettingsScreen(
     repository: MilesRepository,
     onOpenStudio: () -> Unit,
     onOpenDevices: () -> Unit = {},
-    onRerunSetup: () -> Unit = {}
+    onRerunSetup: () -> Unit = {},
+    onRequestHealthConnectPermissions: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -682,7 +683,14 @@ fun SettingsScreen(
                 }
             }
 
-            // 8. PRIVACY, DATA & EXPORTS
+            // 8. HEALTH CONNECT
+            if (shouldShow(SettingsCategory.SENSORS, "health connect", "health", "fitness data", "workout data", "sleep", "recovery")) {
+                item {
+                    HealthConnectSettingsCard(onRequestPermissions = onRequestHealthConnectPermissions)
+                }
+            }
+
+            // 9. PRIVACY, DATA & EXPORTS
             if (shouldShow(SettingsCategory.PRIVACY, "privacy", "zone", "backup", "trash", "restore", "wipe", "reset", "export", "sqlite")) {
                 item {
                     PrivacySettingsCard(
@@ -703,7 +711,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 9. MILES STUDIO PROMINENT CARD
+            // 10. MILES STUDIO PROMINENT CARD
             if (shouldShow(SettingsCategory.STUDIO, "studio", "kalman", "gnss", "developer", "math", "vdot", "nmea", "telemetry")) {
                 item {
                     StudioShortcutCard(onOpenStudio = onOpenStudio)
@@ -783,6 +791,39 @@ fun SettingsScreen(
                     Toast.makeText(context, "Pet & Rest Day settings saved!", Toast.LENGTH_SHORT).show()
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun HealthConnectSettingsCard(onRequestPermissions: () -> Unit) {
+    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "HEALTH CONNECT",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Fitness, workout & recovery data",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Allow MILES to read all supported Health Connect data, including activity, workouts, heart rate, sleep, calories, distance, and recovery metrics.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            FilledTonalButton(onClick = onRequestPermissions) {
+                Text("Manage Health Connect access")
+            }
         }
     }
 }
