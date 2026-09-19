@@ -6,8 +6,19 @@
   <img src="https://img.shields.io/badge/STATUS-1.0.1-success?style=for-the-badge" alt="Version 1.0.1">
   <img src="https://img.shields.io/badge/DEVELOPMENT-ACTIVE-yellow?style=for-the-badge" alt="Active Development">
   <img src="https://img.shields.io/badge/PLATFORM-ANDROID-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
+  <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/JETPACK%20COMPOSE-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/MAPS-OPENSTREETMAP-7EBC6F?style=for-the-badge&logo=openstreetmap&logoColor=white" alt="OpenStreetMap">
+  <img src="https://img.shields.io/badge/HEALTH%20CONNECT-SUPPORTED-4285F4?style=for-the-badge" alt="Health Connect">
+  <img src="https://img.shields.io/badge/WEAR%20OS-COMING%20SOON-4285F4?style=for-the-badge&logo=wearos&logoColor=white" alt="Wear OS Coming Soon">
+  <img src="https://img.shields.io/badge/PRIVACY-LOCAL--FIRST-8A2BE2?style=for-the-badge" alt="Privacy">
   <img src="https://img.shields.io/badge/LICENSE-GPLv3-blue?style=for-the-badge" alt="GPLv3 License">
 </p>
+
+> ⌚ **MILES Wear OS is now a separate project:** https://github.com/anshlabs716/miles-wearos
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portability, customization, and a clean UI.
 
@@ -32,14 +43,6 @@
 - Privacy-focused, local-first design
 
 MILES does not intentionally generate fake GPS, heart-rate, or step data.
-
-## ⌚ Wear OS
-
-The Wear OS companion is developed separately to keep the main Android project clean.
-
-**MILES Wear OS → https://github.com/anshlabs716/miles-wearos**
-
-The watch project will bring MILES tracking, sensors, workout controls, and phone ↔ watch syncing to Wear OS.
 
 ## 🔒 Privacy
 
