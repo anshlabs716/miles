@@ -6,7 +6,13 @@
   <img src="https://img.shields.io/badge/STATUS-1.0.1-success?style=for-the-badge" alt="Version 1.0.1">
   <img src="https://img.shields.io/badge/DEVELOPMENT-ACTIVE-yellow?style=for-the-badge" alt="Active Development">
   <img src="https://img.shields.io/badge/PLATFORM-ANDROID-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
+  <img src="https://img.shields.io/badge/KOTLIN-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/COMPOSE-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
   <img src="https://img.shields.io/badge/LICENSE-GPLv3-blue?style=for-the-badge" alt="GPLv3 License">
+</p>
+
+<p align="center">
+  <a href="https://github.com/anshlabs716/miles-wearos"><img src="https://img.shields.io/badge/⌚%20MILES%20WEAR%20OS-Companion-black?style=for-the-badge" alt="MILES Wear OS"></a>
 </p>
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portability, customization, and a clean UI.
@@ -39,7 +45,7 @@ The Wear OS companion is developed separately to keep the main Android project c
 
 **MILES Wear OS → https://github.com/anshlabs716/miles-wearos**
 
-The watch project will bring MILES tracking, sensors, workout controls, and phone ↔ watch syncing to Wear OS.
+The watch project brings MILES tracking, sensors, workout controls, and phone ↔ watch syncing to Wear OS.
 
 ## 🔒 Privacy
 
@@ -93,7 +99,6 @@ app/build/outputs/apk/debug/app-debug.apk
 | GPS tracking | Implemented |
 | BLE sensors | Foundation implemented |
 | Health Connect | In development |
-| Import/export | Foundation implemented |
 | MILES Studio | Active development |
 | Wear OS | **Separate project** |
 
