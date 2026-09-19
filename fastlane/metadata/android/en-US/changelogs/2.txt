@@ -1,0 +1,6 @@
+F-Droid preparation release
+
+• Removed proprietary Google/Firebase dependencies
+• Replaced Google Play Services location with Android LocationManager
+• Updated release version metadata
+• Improved source-build compatibility
