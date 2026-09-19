@@ -1,0 +1,20 @@
+MILES is a privacy-focused, local-first activity tracker for Android.
+
+Track your real activity with step counting, GPS routes, workouts, Bluetooth sensors and Health Connect. View your activity history and statistics while keeping your data under your control.
+
+Features:
+• Real step and activity tracking
+• GPS route recording
+• Walking, running, cycling and hiking workouts
+• OpenStreetMap-based mapping
+• Bluetooth Low Energy sensor support
+• Health Connect integration
+• JSON, CSV, GPX and TCX data support
+• Movement reminders
+• Custom themes and launcher icons
+• Accessibility options
+• Local-first design with no MILES account or subscription
+
+MILES does not intentionally generate fake GPS, heart-rate or step data.
+
+Wear OS support is developed as a separate companion project.
