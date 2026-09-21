@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.os.Vibrator
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
@@ -45,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -316,6 +319,108 @@ fun SensorsSettingsCard(
                     Icon(Icons.Default.Watch, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Devices", fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Custom Notification & Move Reminder Configuration
+            var customReminderText by remember(userPrefs.moveReminderCustomText) {
+                mutableStateOf(userPrefs.moveReminderCustomText)
+            }
+            var reminderEditing by remember { mutableStateOf(false) }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Custom Movement Notification", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = if (userPrefs.moveReminderEnabled) "Active every ${userPrefs.moveReminderIntervalMinutes}m • Custom prompt"
+                               else "Sedentary alert notification is off",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = userPrefs.moveReminderEnabled,
+                    onCheckedChange = { isEnabled ->
+                        preferences.setMoveReminderSettings(
+                            enabled = isEnabled,
+                            intervalMinutes = userPrefs.moveReminderIntervalMinutes,
+                            customMessage = customReminderText
+                        )
+                    }
+                )
+            }
+
+            if (userPrefs.moveReminderEnabled) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Notification Message",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = customReminderText,
+                    onValueChange = {
+                        customReminderText = it
+                        reminderEditing = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Custom Notification Text") },
+                    placeholder = { Text("e.g. Time to stretch and conquer today's miles!") },
+                    trailingIcon = {
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    singleLine = false,
+                    maxLines = 3
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Interval: ${userPrefs.moveReminderIntervalMinutes} min",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                customReminderText = "Time to stretch and get moving! Take 250 steps."
+                                preferences.setMoveReminderSettings(
+                                    enabled = true,
+                                    intervalMinutes = userPrefs.moveReminderIntervalMinutes,
+                                    customMessage = customReminderText
+                                )
+                                reminderEditing = false
+                                Toast.makeText(context, "Notification message reset to default", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text("Reset", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = {
+                                val savedText = customReminderText.trim().ifEmpty { "Time to stretch and get moving! Take 250 steps." }
+                                preferences.setMoveReminderSettings(
+                                    enabled = true,
+                                    intervalMinutes = userPrefs.moveReminderIntervalMinutes,
+                                    customMessage = savedText
+                                )
+                                reminderEditing = false
+                                Toast.makeText(context, "Custom notification message saved!", Toast.LENGTH_SHORT).show()
+                            },
+                            enabled = reminderEditing
+                        ) {
+                            Text("Save", fontSize = 11.sp)
+                        }
+                    }
                 }
             }
 

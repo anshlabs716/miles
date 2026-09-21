@@ -32,11 +32,11 @@ class TrackingForegroundService : Service() {
         locationTracker = LocationTracker(this)
         createChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Hardware tracking active"), foregroundType())
-        if (hasActivityRecognition()) pedometer.startTracking()
+        pedometer.startTracking()
 
         scope.launch {
             preferences.userPreferences.collect { prefs ->
-                if (prefs.stepSensorHardwareEnabled && hasActivityRecognition()) pedometer.startTracking()
+                if (prefs.stepSensorHardwareEnabled) pedometer.startTracking()
                 else pedometer.stopTracking()
                 if (prefs.gpsSensorEnabled && locationTracker.hasLocationPermission()) {
                     locationTracker.startTracking(prefs.sensorRefreshRateMs, true)

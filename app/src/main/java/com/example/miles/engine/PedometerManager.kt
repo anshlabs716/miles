@@ -45,8 +45,10 @@ class PedometerManager(
     private var accelSensor: Sensor? = null
     private var lastCounterValue = -1f
     private var todayDate = currentDate()
-    private var lastMagnitude = 0.0
+    private var lastMagnitude = 9.81
+    private var emaGravity = 9.81
     private var lastStepTimeMs = 0L
+    private var wavePeakDetected = false
 
     init {
         setupSensors()
@@ -57,15 +59,21 @@ class PedometerManager(
     private fun currentDate(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-    private fun hasActivityPermission(): Boolean =
-        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q ||
+    private fun hasActivityPermission(): Boolean {
+        // Accelerometer fallback does NOT require ACTIVITY_RECOGNITION on Android
+        // Only hardware step counter/detector require it on Android Q+
+        val isHardwareStepSensor = stepCounterSensor != null || stepDetectorSensor != null
+        if (!isHardwareStepSensor) return true
+        return android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+    }
 
     private fun loadTodayState() {
         val today = currentDate()
         todayDate = today
         val storedDate = prefs.getString(KEY_DATE, null)
         if (storedDate != today) {
+            // New calendar day: start fresh from 0 for the new day
             prefs.edit()
                 .putString(KEY_DATE, today)
                 .putInt(KEY_TODAY_STEPS, 0)
@@ -147,8 +155,9 @@ class PedometerManager(
                 _sensorStatus.value = "Hardware step detector active"
             }
             accelSensor != null -> {
-                sm.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME)
-                _sensorStatus.value = "Accelerometer fallback active"
+                // SENSOR_DELAY_UI (approx 60ms) is ideal and battery-efficient for step detection on tablets
+                sm.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI)
+                _sensorStatus.value = "Tablet accelerometer pedometer active"
             }
             else -> _sensorStatus.value = "No supported motion sensor"
         }
@@ -211,16 +220,36 @@ class PedometerManager(
         val x = event.values.getOrNull(0)?.toDouble() ?: return
         val y = event.values.getOrNull(1)?.toDouble() ?: return
         val z = event.values.getOrNull(2)?.toDouble() ?: return
-        val magnitude = sqrt(x * x + y * y + z * z)
+        val rawMagnitude = sqrt(x * x + y * y + z * z)
         val now = System.currentTimeMillis()
+
+        // Low-pass filter for gravity adaptation (alpha = 0.1)
+        emaGravity = 0.9 * emaGravity + 0.1 * rawMagnitude
+        // Net acceleration removes constant 1G regardless of tablet orientation
+        val netAcceleration = rawMagnitude - emaGravity
+
         val sensitivity = preferences.userPreferences.value.stepSensitivityThreshold.coerceIn(0.7f, 2.5f)
-        val threshold = 1.4 * sensitivity
-        if (magnitude - lastMagnitude > threshold && now - lastStepTimeMs >= 300L) {
-            lastStepTimeMs = now
-            persistSteps(_todaySteps.value + 1)
-            onStepDetected?.invoke(1)
+        // Adaptive threshold: lower minimum bar so normal tablet sway or walk registers
+        val peakThreshold = 0.85 * sensitivity
+
+        if (netAcceleration > peakThreshold) {
+            wavePeakDetected = true
+        } else if (wavePeakDetected && netAcceleration < (0.2 * sensitivity)) {
+            // Completed wave peak-to-trough cycle
+            if (now - lastStepTimeMs in 240L..2000L) {
+                lastStepTimeMs = now
+                wavePeakDetected = false
+                persistSteps(_todaySteps.value + 1)
+                onStepDetected?.invoke(1)
+            } else if (now - lastStepTimeMs > 2000L) {
+                // First step after pause or rest
+                lastStepTimeMs = now
+                wavePeakDetected = false
+                persistSteps(_todaySteps.value + 1)
+                onStepDetected?.invoke(1)
+            }
         }
-        lastMagnitude = magnitude
+        lastMagnitude = rawMagnitude
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
