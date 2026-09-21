@@ -22,7 +22,7 @@
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portability, customization, and a clean UI.
 
-> **Status:** Version 1.0.1 — first official APK release.
+> **Status:** Version 1.0.3
 
 ## ✨ Features
 
