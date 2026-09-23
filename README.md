@@ -3,7 +3,7 @@
 ### A modern, customizable, privacy-focused activity tracker for Android.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/STATUS-1.0.4-success?style=for-the-badge" alt="Version 1.0.4">
+  <img src="https://img.shields.io/badge/STATUS-1.0.5-success?style=for-the-badge" alt="Version 1.0.5">
   <img src="https://img.shields.io/badge/DEVELOPMENT-ACTIVE-yellow?style=for-the-badge" alt="Active Development">
   <img src="https://img.shields.io/badge/PLATFORM-ANDROID-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
   <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
@@ -22,7 +22,7 @@
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portability, customization, and a clean UI.
 
-> **Status:** Version 1.0.4
+> **Status:** Version 1.0.5
 
 ## ✨ Features
 
@@ -91,24 +91,24 @@ app/build/outputs/apk/debug/app-debug.apk
 
 | Area | Status |
 | --- | --- |
-| Android app | **1.0.4 released** |
+| Android app | **1.0.5 released** |
 | Step tracking | Implemented |
 | GPS tracking | Implemented |
 | BLE sensors | Foundation implemented |
 | Health Connect | In development |
 | Import/export | Foundation implemented |
-| MILES Studio | Active development |
+| MILES Studio | implemented |
 | Wear OS | **Separate project** |
 
 ## 🗺️ Roadmap
 
-- More sensor support
-- Better GPS filtering and route smoothing
-- Health Connect completion
-- Portable backup/restore
-- More accessibility polish
-- Continued MILES Studio development
-- Wear OS companion development
+-More sensor support
+-Better GPS filtering and route smoothing
+-Health Connect completion
+-Portable backup/restore
+-More accessibility polish
+-Continued MILES Studio development
+-Wear OS companion development
 
 ## 📄 License
 
