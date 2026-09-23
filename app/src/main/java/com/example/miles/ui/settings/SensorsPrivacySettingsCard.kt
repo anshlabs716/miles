@@ -461,7 +461,8 @@ fun PrivacySettingsCard(
     onOpenBackup: () -> Unit,
     onOpenTrash: () -> Unit,
     onWipeData: () -> Unit,
-    onResetDefaults: () -> Unit
+    onResetDefaults: () -> Unit,
+    onOpenPermissionsPrompt: () -> Unit = {}
 ) {
     LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -553,7 +554,7 @@ fun PrivacySettingsCard(
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("SQLite Backup", fontSize = 11.sp)
+                    Text("Export & Backup", fontSize = 11.sp)
                 }
 
                 OutlinedButton(
@@ -591,6 +592,17 @@ fun PrivacySettingsCard(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Wipe All Data", fontSize = 11.sp)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedButton(
+                onClick = onOpenPermissionsPrompt,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Review Health & Permissions Prompt", fontSize = 12.sp)
             }
         }
     }

@@ -13,7 +13,7 @@ android {
     minSdk = 26
     targetSdk = 36
     versionCode = 2
-    versionName = "1.0.2"
+    versionName = "1.0.3"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
   signingConfigs {
@@ -65,6 +65,7 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.health.connect.client)
+  implementation(libs.androidx.car.app)
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.kotlinx.coroutines.android)

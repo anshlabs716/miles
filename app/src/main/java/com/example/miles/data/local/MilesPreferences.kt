@@ -62,6 +62,7 @@ enum class TrackingSourceMode(val label: String, val shortLabel: String, val des
     GPS_ONLY("GPS Only", "GPS", "High precision satellite telemetry only"),
     SENSORS_ONLY("Sensors Only", "Sensors", "Built-in hardware pedometer & accelerometer"),
     BLUETOOTH_TUNNEL("Bluetooth Tunnel", "BT Tunnel", "External BLE sensors & Wear OS watch bridge"),
+    TABLET_PROTOCOL("Tablet Protocol", "Tablet", "Wi-Fi & cell location + Sensors + Bluetooth + Health Connect"),
     CUSTOM("Custom Combination", "Custom", "Toggle individual sensor feeds manually")
 }
 
@@ -616,6 +617,7 @@ class MilesPreferences(context: Context) {
             TrackingSourceMode.GPS_ONLY -> Triple(true, false, false)
             TrackingSourceMode.SENSORS_ONLY -> Triple(false, true, false)
             TrackingSourceMode.BLUETOOTH_TUNNEL -> Triple(false, false, true)
+            TrackingSourceMode.TABLET_PROTOCOL -> Triple(true, true, true) // Network/Wi-Fi location + sensors + BT + Health
             TrackingSourceMode.CUSTOM -> Triple(cur.gpsSensorEnabled, cur.stepSensorHardwareEnabled, cur.bluetoothTunnelingEnabled)
         }
         prefs.edit()

@@ -185,6 +185,342 @@ class MilesRepository(
         }
     }
 
+    suspend fun exportActivityAsKml(activityId: String): String = withContext(Dispatchers.IO) {
+        val act = activityDao.getActivityByIdOnce(activityId) ?: return@withContext ""
+        val points = filterPointsWithPrivacyZones(parsePoints(act.routePointsJson))
+        buildString {
+            append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+            append("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n")
+            append("  <Document>\n")
+            append("    <name>${act.title}</name>\n")
+            append("    <description>Distance: ${(act.distanceMeters / 1000.0).format(2)} km, Duration: ${act.durationSeconds / 60} min</description>\n")
+            append("    <Placemark>\n")
+            append("      <name>Track</name>\n")
+            append("      <LineString>\n")
+            append("        <tessellate>1</tessellate>\n")
+            append("        <coordinates>\n")
+            points.forEach { p ->
+                append("          ${p.longitude},${p.latitude},${p.altitude}\n")
+            }
+            append("        </coordinates>\n")
+            append("      </LineString>\n")
+            append("    </Placemark>\n")
+            append("  </Document>\n")
+            append("</kml>")
+        }
+    }
+
+    suspend fun exportActivityAsTcx(activityId: String): String = withContext(Dispatchers.IO) {
+        val act = activityDao.getActivityByIdOnce(activityId) ?: return@withContext ""
+        val points = filterPointsWithPrivacyZones(parsePoints(act.routePointsJson))
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        buildString {
+            append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+            append("<TrainingCenterDatabase xmlns=\"http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2\">\n")
+            append("  <Activities>\n")
+            append("    <Activity Sport=\"${act.activityType}\">\n")
+            append("      <Id>${sdf.format(Date(act.startTime))}</Id>\n")
+            append("      <Lap StartTime=\"${sdf.format(Date(act.startTime))}\">\n")
+            append("        <TotalTimeSeconds>${act.durationSeconds}</TotalTimeSeconds>\n")
+            append("        <DistanceMeters>${act.distanceMeters}</DistanceMeters>\n")
+            append("        <Calories>${act.calories}</Calories>\n")
+            append("        <Track>\n")
+            points.forEach { p ->
+                append("          <Trackpoint>\n")
+                append("            <Time>${sdf.format(Date(p.timestamp))}</Time>\n")
+                append("            <Position>\n")
+                append("              <LatitudeDegrees>${p.latitude}</LatitudeDegrees>\n")
+                append("              <LongitudeDegrees>${p.longitude}</LongitudeDegrees>\n")
+                append("            </Position>\n")
+                append("            <AltitudeMeters>${p.altitude}</AltitudeMeters>\n")
+                append("          </Trackpoint>\n")
+            }
+            append("        </Track>\n")
+            append("      </Lap>\n")
+            append("    </Activity>\n")
+            append("  </Activities>\n")
+            append("</TrainingCenterDatabase>")
+        }
+    }
+
+    suspend fun exportActivityAsGeoJson(activityId: String): String = withContext(Dispatchers.IO) {
+        val act = activityDao.getActivityByIdOnce(activityId) ?: return@withContext ""
+        val points = filterPointsWithPrivacyZones(parsePoints(act.routePointsJson))
+        val coords = JSONArray()
+        points.forEach { p ->
+            coords.put(JSONArray().apply {
+                put(p.longitude)
+                put(p.latitude)
+                put(p.altitude)
+            })
+        }
+        val feature = JSONObject().apply {
+            put("type", "Feature")
+            put("geometry", JSONObject().apply {
+                put("type", "LineString")
+                put("coordinates", coords)
+            })
+            put("properties", JSONObject().apply {
+                put("title", act.title)
+                put("type", act.activityType)
+                put("distanceMeters", act.distanceMeters)
+                put("durationSeconds", act.durationSeconds)
+                put("calories", act.calories)
+                put("startTime", act.startTime)
+            })
+        }
+        JSONObject().apply {
+            put("type", "FeatureCollection")
+            put("features", JSONArray().apply { put(feature) })
+        }.toString(2)
+    }
+
+    suspend fun exportRouteAsKml(routeId: String): String = withContext(Dispatchers.IO) {
+        val route = routeDao.getRouteById(routeId) ?: return@withContext ""
+        val points = parsePoints(route.routePointsJson)
+        buildString {
+            append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+            append("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n")
+            append("  <Document>\n")
+            append("    <name>${route.name}</name>\n")
+            append("    <description>MILES Saved Route: ${(route.distanceMeters / 1000.0).format(2)} km</description>\n")
+            append("    <Placemark>\n")
+            append("      <name>${route.name}</name>\n")
+            append("      <LineString>\n")
+            append("        <tessellate>1</tessellate>\n")
+            append("        <coordinates>\n")
+            points.forEach { p ->
+                append("          ${p.longitude},${p.latitude},${p.altitude}\n")
+            }
+            append("        </coordinates>\n")
+            append("      </LineString>\n")
+            append("    </Placemark>\n")
+            append("  </Document>\n")
+            append("</kml>")
+        }
+    }
+
+    suspend fun exportRouteAsGeoJson(routeId: String): String = withContext(Dispatchers.IO) {
+        val route = routeDao.getRouteById(routeId) ?: return@withContext ""
+        val points = parsePoints(route.routePointsJson)
+        val coords = JSONArray()
+        points.forEach { p ->
+            coords.put(JSONArray().apply {
+                put(p.longitude)
+                put(p.latitude)
+                put(p.altitude)
+            })
+        }
+        val feature = JSONObject().apply {
+            put("type", "Feature")
+            put("geometry", JSONObject().apply {
+                put("type", "LineString")
+                put("coordinates", coords)
+            })
+            put("properties", JSONObject().apply {
+                put("name", route.name)
+                put("activityType", route.activityType)
+                put("distanceMeters", route.distanceMeters)
+                put("estimatedDurationSeconds", (route.distanceMeters / 2.8).toLong())
+                put("elevationGainM", route.elevationGainM)
+            })
+        }
+        JSONObject().apply {
+            put("type", "FeatureCollection")
+            put("features", JSONArray().apply { put(feature) })
+        }.toString(2)
+    }
+
+    suspend fun importRouteFromKml(kmlStr: String): SavedRouteEntity? = withContext(Dispatchers.IO) {
+        val nameRegex = Regex("""<name>([^<]+)</name>""")
+        val name = nameRegex.find(kmlStr)?.groupValues?.get(1)?.trim() ?: "Imported KML Route"
+        val coordMatch = Regex("""<coordinates>([\s\S]*?)</coordinates>""").find(kmlStr) ?: return@withContext null
+        val coordText = coordMatch.groupValues[1].trim()
+        val points = mutableListOf<GpsPoint>()
+        val tokens = coordText.split(Regex("""\s+"""))
+        val now = System.currentTimeMillis()
+        tokens.forEachIndexed { idx, token ->
+            val parts = token.split(",")
+            if (parts.size >= 2) {
+                val lon = parts[0].toDoubleOrNull() ?: return@forEachIndexed
+                val lat = parts[1].toDoubleOrNull() ?: return@forEachIndexed
+                val alt = if (parts.size >= 3) parts[2].toDoubleOrNull() ?: 10.0 else 10.0
+                points.add(GpsPoint(latitude = lat, longitude = lon, altitude = alt, timestamp = now + (idx * 2000L)))
+            }
+        }
+        if (points.isEmpty()) return@withContext null
+        var totalDist = 0.0
+        for (i in 0 until points.size - 1) {
+            totalDist += calculateDistanceMeters(points[i].latitude, points[i].longitude, points[i + 1].latitude, points[i + 1].longitude)
+        }
+        val route = SavedRouteEntity(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            title = name,
+            activityType = ActivityType.RUNNING.name,
+            distanceMeters = totalDist,
+            elevationGainM = 20.0,
+            routePointsJson = pointsToJson(points),
+            waypointsJson = "[]",
+            createdAt = now
+        )
+        routeDao.insertRoute(route)
+        route
+    }
+
+    suspend fun importRouteFromGeoJson(geoJsonStr: String): SavedRouteEntity? = withContext(Dispatchers.IO) {
+        val root = JSONObject(geoJsonStr)
+        var feature = root
+        if (root.optString("type") == "FeatureCollection") {
+            val features = root.optJSONArray("features") ?: return@withContext null
+            if (features.length() == 0) return@withContext null
+            feature = features.getJSONObject(0)
+        }
+        val geometry = feature.optJSONObject("geometry") ?: return@withContext null
+        val coords = geometry.optJSONArray("coordinates") ?: return@withContext null
+        val points = mutableListOf<GpsPoint>()
+        val now = System.currentTimeMillis()
+        for (i in 0 until coords.length()) {
+            val item = coords.optJSONArray(i) ?: continue
+            if (item.length() >= 2) {
+                val lon = item.getDouble(0)
+                val lat = item.getDouble(1)
+                val alt = if (item.length() >= 3) item.getDouble(2) else 10.0
+                points.add(GpsPoint(latitude = lat, longitude = lon, altitude = alt, timestamp = now + (i * 2000L)))
+            }
+        }
+        if (points.isEmpty()) return@withContext null
+        var totalDist = 0.0
+        for (i in 0 until points.size - 1) {
+            totalDist += calculateDistanceMeters(points[i].latitude, points[i].longitude, points[i + 1].latitude, points[i + 1].longitude)
+        }
+        val props = feature.optJSONObject("properties")
+        val name = props?.optString("name", props.optString("title", "Imported GeoJSON Route")) ?: "Imported GeoJSON Route"
+        val activityType = props?.optString("activityType", props.optString("type", ActivityType.RUNNING.name)) ?: ActivityType.RUNNING.name
+        val route = SavedRouteEntity(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            title = name,
+            activityType = activityType,
+            distanceMeters = totalDist,
+            elevationGainM = props?.optDouble("elevationGainM", 15.0) ?: 15.0,
+            routePointsJson = pointsToJson(points),
+            waypointsJson = "[]",
+            createdAt = now
+        )
+        routeDao.insertRoute(route)
+        route
+    }
+
+    suspend fun importFromKml(kmlStr: String): Int = withContext(Dispatchers.IO) {
+        val nameRegex = Regex("""<name>([^<]+)</name>""")
+        val name = nameRegex.find(kmlStr)?.groupValues?.get(1)?.trim() ?: "Imported KML Workout"
+        val coordMatch = Regex("""<coordinates>([\s\S]*?)</coordinates>""").find(kmlStr) ?: return@withContext 0
+        val coordText = coordMatch.groupValues[1].trim()
+        val points = mutableListOf<GpsPoint>()
+        val tokens = coordText.split(Regex("""\s+"""))
+        val now = System.currentTimeMillis()
+        tokens.forEachIndexed { idx, token ->
+            val parts = token.split(",")
+            if (parts.size >= 2) {
+                val lon = parts[0].toDoubleOrNull() ?: return@forEachIndexed
+                val lat = parts[1].toDoubleOrNull() ?: return@forEachIndexed
+                val alt = if (parts.size >= 3) parts[2].toDoubleOrNull() ?: 10.0 else 10.0
+                points.add(GpsPoint(latitude = lat, longitude = lon, altitude = alt, timestamp = now + (idx * 2000L), speed = 2.8f, accuracy = 4.0f))
+            }
+        }
+        if (points.isEmpty()) return@withContext 0
+        var totalDist = 0.0
+        for (i in 0 until points.size - 1) {
+            totalDist += calculateDistanceMeters(points[i].latitude, points[i].longitude, points[i + 1].latitude, points[i + 1].longitude)
+        }
+        val durationSec = (points.size * 2L).coerceAtLeast(60L)
+        val entity = ActivityEntity(
+            id = UUID.randomUUID().toString(),
+            title = name,
+            activityType = ActivityType.RUNNING.name,
+            startTime = now - (durationSec * 1000L),
+            endTime = now,
+            durationSeconds = durationSec,
+            distanceMeters = totalDist,
+            steps = (totalDist * 1.3).toInt(),
+            avgPaceSecPerKm = if (totalDist > 0) durationSec / (totalDist / 1000.0) else 0.0,
+            avgSpeedKmh = if (durationSec > 0) (totalDist / 1000.0) / (durationSec / 3600.0) else 0.0,
+            elevationGainM = 20.0,
+            calories = (totalDist / 1000.0 * 65.0).toInt(),
+            avgHeartRate = 145,
+            routePointsJson = pointsToJson(points),
+            waypointsJson = "[]",
+            notes = "Imported KML track (${points.size} points)"
+        )
+        activityDao.insertActivity(entity)
+        1
+    }
+
+    suspend fun importFromGeoJson(geoJsonStr: String): Int = withContext(Dispatchers.IO) {
+        val root = JSONObject(geoJsonStr)
+        val featureList = mutableListOf<JSONObject>()
+        if (root.optString("type") == "FeatureCollection") {
+            val features = root.optJSONArray("features")
+            if (features != null) {
+                for (i in 0 until features.length()) {
+                    featureList.add(features.getJSONObject(i))
+                }
+            }
+        } else if (root.optString("type") == "Feature") {
+            featureList.add(root)
+        }
+
+        var imported = 0
+        val now = System.currentTimeMillis()
+        for (f in featureList) {
+            val geometry = f.optJSONObject("geometry") ?: continue
+            val coords = geometry.optJSONArray("coordinates") ?: continue
+            val points = mutableListOf<GpsPoint>()
+            for (i in 0 until coords.length()) {
+                val item = coords.optJSONArray(i) ?: continue
+                if (item.length() >= 2) {
+                    val lon = item.getDouble(0)
+                    val lat = item.getDouble(1)
+                    val alt = if (item.length() >= 3) item.getDouble(2) else 10.0
+                    points.add(GpsPoint(latitude = lat, longitude = lon, altitude = alt, timestamp = now + (i * 2000L), speed = 2.8f, accuracy = 4.0f))
+                }
+            }
+            if (points.isEmpty()) continue
+            var totalDist = 0.0
+            for (i in 0 until points.size - 1) {
+                totalDist += calculateDistanceMeters(points[i].latitude, points[i].longitude, points[i + 1].latitude, points[i + 1].longitude)
+            }
+            val props = f.optJSONObject("properties")
+            val title = props?.optString("title", props.optString("name", "Imported GeoJSON Workout")) ?: "Imported GeoJSON Workout"
+            val type = props?.optString("type", props.optString("activityType", ActivityType.RUNNING.name)) ?: ActivityType.RUNNING.name
+            val durationSec = props?.optLong("durationSeconds", (points.size * 2L).coerceAtLeast(60L)) ?: (points.size * 2L).coerceAtLeast(60L)
+            val cals = props?.optInt("calories", (totalDist / 1000.0 * 65.0).toInt()) ?: (totalDist / 1000.0 * 65.0).toInt()
+
+            val entity = ActivityEntity(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                activityType = type,
+                startTime = now - (durationSec * 1000L),
+                endTime = now,
+                durationSeconds = durationSec,
+                distanceMeters = totalDist,
+                steps = (totalDist * 1.3).toInt(),
+                avgPaceSecPerKm = if (totalDist > 0) durationSec / (totalDist / 1000.0) else 0.0,
+                avgSpeedKmh = if (durationSec > 0) (totalDist / 1000.0) / (durationSec / 3600.0) else 0.0,
+                elevationGainM = props?.optDouble("elevationGainM", 20.0) ?: 20.0,
+                calories = cals,
+                avgHeartRate = 145,
+                routePointsJson = pointsToJson(points),
+                waypointsJson = "[]",
+                notes = "Imported GeoJSON workout"
+            )
+            activityDao.insertActivity(entity)
+            imported++
+        }
+        imported
+    }
+
     suspend fun exportActivitiesAsCsv(): String = withContext(Dispatchers.IO) {
         val acts = activityDao.getAllActivitiesOnce()
         buildString {
@@ -249,10 +585,12 @@ class MilesRepository(
         val trimmed = fileContent.trim()
         try {
             when {
-                trimmed.startsWith("{") || trimmed.startsWith("[") -> importFromJson(trimmed).let { it to "Successfully imported $it activities from JSON." }
+                trimmed.contains("<kml") || trimmed.contains("<Document") -> importFromKml(trimmed).let { it to "Successfully imported $it activity from KML track." }
                 trimmed.startsWith("<?xml") || trimmed.contains("<gpx") -> importFromGpx(trimmed).let { it to "Successfully imported $it activity from GPX track." }
+                (trimmed.startsWith("{") && (trimmed.contains("\"Feature\"") || trimmed.contains("\"FeatureCollection\""))) -> importFromGeoJson(trimmed).let { it to "Successfully imported $it activity from GeoJSON track." }
+                trimmed.startsWith("{") || trimmed.startsWith("[") -> importFromJson(trimmed).let { it to "Successfully imported $it activities from JSON." }
                 trimmed.contains(",") || trimmed.contains(";") -> importFromCsv(trimmed).let { it to "Successfully imported $it activities from CSV / Google Fit export." }
-                else -> 0 to "Unrecognized format. Supported formats: CSV, Google Fit, JSON, and GPX."
+                else -> 0 to "Unrecognized format. Supported formats: GPX, KML, GeoJSON, CSV, Google Fit, and JSON."
             }
         } catch (e: Exception) { 0 to "Import error: ${e.localizedMessage ?: "Invalid file structure"}" }
     }

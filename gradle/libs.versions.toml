@@ -31,6 +31,7 @@ datastorePreferences = "1.1.7"
 robolectric = "4.16.1"
 roborazzi = "1.59.0"
 healthConnect = "1.1.0-alpha12"
+carApp = "1.4.0"
 secretsGradlePlugin = "2.0.1"
 googleServices = "4.5.0"
 
@@ -75,6 +76,7 @@ roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", versi
 roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
 roborazzi-junit-rule = { group = "io.github.takahirom.roborazzi", name = "roborazzi-junit-rule", version.ref = "roborazzi" }
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+androidx-car-app = { group = "androidx.car.app", name = "app", version.ref = "carApp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

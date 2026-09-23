@@ -30,7 +30,6 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_SPEED" />
     <uses-permission android:name="android.permission.health.READ_STEPS_CADENCE" />
-    <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
@@ -60,6 +59,22 @@
         <activity-alias android:name="com.example.MainActivityLime" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_lime" android:roundIcon="@mipmap/ic_launcher_lime" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
         <activity-alias android:name="com.example.MainActivityRoyal" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_royal" android:roundIcon="@mipmap/ic_launcher_royal" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
 
+        <!-- MILES Android Auto Navigation Service -->
+        <service
+            android:name="com.example.miles.auto.MilesCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.NAVIGATION"/>
+            </intent-filter>
+        </service>
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <!-- MILES Home Screen Widgets -->
         <receiver
             android:name="com.example.miles.widget.MilesRingsWidgetProvider"
@@ -81,6 +96,17 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_miles_quick_workout_info" />
+        </receiver>
+
+        <!-- MILES Widget Background Sync Receiver -->
+        <receiver
+            android:name="com.example.miles.widget.MilesWidgetSyncReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.miles.ACTION_SYNC_WIDGETS" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
         </receiver>
     </application>
 </manifest>

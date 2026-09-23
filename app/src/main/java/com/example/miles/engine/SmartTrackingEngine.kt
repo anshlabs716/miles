@@ -141,7 +141,11 @@ class SmartTrackingEngine(
     var targetPaceSecPerKm: Double = 330.0 // 5:30 min/km default target pace
         set(value) {
             field = value.coerceIn(60.0, 3600.0)
+            targetAlertManager.config = targetAlertManager.config.copy(targetPaceSecPerKm = field)
         }
+
+    val navigationTts = NavigationTtsManager(context)
+    val targetAlertManager = WorkoutTargetAlertManager(context, navigationTts)
 
     // Kalman / smoothing state
     private var lastFilteredPoint: GpsPoint? = null
@@ -479,7 +483,15 @@ class SmartTrackingEngine(
             lastMilestoneKm = currentKm
             val paceStr = formatPace(avgPaceSec)
             _events.tryEmit(TrackingEvent.MilestoneReached("Milestone: $currentKm km", "Pace: $paceStr/km • Time: ${formatDuration(elapsed)}"))
+            navigationTts.speak("Milestone reached: $currentKm kilometers. Pace: $paceStr per kilometer.")
         }
+
+        // Live Target Zone alerts (pace, speed, heart rate)
+        targetAlertManager.evaluateMetrics(
+            paceSecPerKm = if (currentPaceSec > 0) currentPaceSec else avgPaceSec,
+            speedKmh = currentSpeedKmh,
+            heartRateBpm = if (current.heartRate > 0) current.heartRate else null
+        )
 
         // Route Navigation Calculations
         var navCrossTrackError = current.navCrossTrackErrorM
@@ -511,8 +523,10 @@ class SmartTrackingEngine(
 
             if (navIsOffRoute && !wasOffRoute) {
                 _events.tryEmit(TrackingEvent.NavigationAlert("⚠️ Off-Route (${minDist.toInt()}m from path) - Return to route!", true))
+                navigationTts.announceRerouting()
             } else if (!navIsOffRoute && wasOffRoute) {
                 _events.tryEmit(TrackingEvent.NavigationAlert("Back on track! ✓"))
+                navigationTts.speak("Back on track.")
             }
 
             val nextIdx = (closestIdx + 1).coerceAtMost(targetNavPoints.size - 1)
@@ -645,9 +659,11 @@ class SmartTrackingEngine(
                                     currentIntervalTotalSeconds = next.durationSeconds
                                 )
                                 _events.tryEmit(TrackingEvent.IntervalChanged(next.type.label, next.instruction))
+                                navigationTts.announceIntervalChange(next.type.label, next.durationSeconds, next.instruction)
                             } else {
                                 // Workout complete
                                 _events.tryEmit(TrackingEvent.MilestoneReached("Interval Workout Complete! 🎉", "Great job finishing your structured session!"))
+                                navigationTts.speak("Interval workout complete! Great job finishing your structured session.")
                             }
                         }
                     }

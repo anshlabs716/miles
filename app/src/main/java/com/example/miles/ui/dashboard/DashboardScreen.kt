@@ -1,12 +1,11 @@
 package com.example.miles.ui.dashboard
 
+import android.content.Context
+import android.os.BatteryManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,28 +29,46 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NordicWalking
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.ui.platform.LocalContext
-import com.example.miles.engine.DeviceSourceType
-import com.example.miles.wear.WearCompanionManager
-import com.example.miles.wear.WearConnectionStatus
-import com.example.miles.widget.MilesWidgetUpdater
+import androidx.compose.material.icons.filled.Watch
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,6 +76,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +86,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -79,12 +98,16 @@ import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
 import com.example.miles.engine.DeviceManager
+import com.example.miles.engine.DeviceSourceType
 import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
 import com.example.miles.engine.TrackingState
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
+import com.example.miles.wear.WearCompanionManager
+import com.example.miles.wear.WearConnectionStatus
+import com.example.miles.widget.MilesWidgetUpdater
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -103,7 +126,11 @@ fun DashboardScreen(
     onStartActivity: (ActivityType) -> Unit,
     onNavigateToHud: () -> Unit,
     onSelectActivity: (ActivityEntity) -> Unit,
-    onOpenStudio: () -> Unit
+    onOpenStudio: () -> Unit,
+    onOpenTools: () -> Unit = {},
+    onOpenPermissionsPrompt: () -> Unit = {},
+    onOpenRoutes: () -> Unit = {},
+    onOpenStats: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val liveStats by smartEngine.liveStats.collectAsState()
@@ -115,6 +142,30 @@ fun DashboardScreen(
     val wearStatus by (wearCompanion?.connectionStatus?.collectAsState() ?: remember { mutableStateOf(WearConnectionStatus.DISCONNECTED) })
     val isWatchConnected = wearStatus == WearConnectionStatus.CONNECTED || deviceSources.any { it.type == DeviceSourceType.WEAR_OS_SENSOR && it.isConnected }
     val hasHeartRateDevice = hasHrCap || (currentBpm != null && currentBpm!! > 0) || isWatchConnected
+
+    // Battery & Hardware queries
+    val batteryManager = remember { context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager }
+    val batteryPct = remember {
+        batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.coerceIn(1, 100) ?: 82
+    }
+    val isCharging = remember {
+        batteryManager?.isCharging == true
+    }
+
+    // Dashboard Customization Local State
+    var showCustomizeDialog by remember { mutableStateOf(false) }
+    var cardActivityRings by remember { mutableStateOf(true) }
+    var cardQuickSports by remember { mutableStateOf(true) }
+    var cardWeather by remember { mutableStateOf(true) }
+    var cardTelemetry by remember { mutableStateOf(true) }
+    var cardStreaks by remember { mutableStateOf(true) }
+    var cardPersonalRecords by remember { mutableStateOf(true) }
+    var cardPet by remember { mutableStateOf(true) }
+    var cardRecentWorkouts by remember { mutableStateOf(true) }
+    var hideCalories by remember { mutableStateOf(false) }
+    var hideSteps by remember { mutableStateOf(false) }
+    var hideActiveTime by remember { mutableStateOf(false) }
+    var layoutMode by remember { mutableStateOf("STANDARD") } // STANDARD, COMPACT, EXPANDED
 
     val todayStart = rememberTodayStartTimestamp()
     val todayActivities = activities.filter { it.startTime >= todayStart }
@@ -129,15 +180,12 @@ fun DashboardScreen(
     val isMetric = userPreferences.unit == DistanceUnit.METRIC
     val todayDistanceDisplay = if (isMetric) todayDistanceM / 1000.0 else todayDistanceM * 0.000621371
     val unitLabel = if (isMetric) "km" else "mi"
-    val todayDurationMin = todayActivities.sumOf { it.durationSeconds } / 60
-    val workoutCalories = todayActivities.sumOf { it.calories }
 
-    // Enhanced calorie estimation: base step burn + workout calories.
-    // When watch or heart-rate sensor is paired, calorie burn integrates elevated physiological exertion!
-    val hrFactor = if (isWatchConnected && currentBpm != null && currentBpm!! > 90) 1.25f else 1.0f
-    val stepCalories = (todaySteps * 0.045f * hrFactor).toInt()
-    val totalCalories = maxOf(workoutCalories, stepCalories + workoutCalories)
-    val calorieGoal = 500.coerceAtLeast(100)
+    val todayDurationSec = todayActivities.sumOf { it.durationSeconds }
+    val todayDurationMin = todayDurationSec / 60
+    val totalCalories = todayActivities.sumOf { it.calories }
+
+    val calorieGoal = userPreferences.dailyCaloriesGoal.coerceAtLeast(100)
     val stepGoal = userPreferences.dailyStepGoal.coerceAtLeast(1000)
     val activeMinGoal = userPreferences.dailyActiveMinutesGoal.coerceAtLeast(10)
 
@@ -159,11 +207,14 @@ fun DashboardScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(if (layoutMode == "COMPACT") 10.dp else 16.dp)
     ) {
+        // 1. TOP HEADER & STUDIO SHORTCUT
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Color(userPreferences.appIcon.colorHex)), contentAlignment = Alignment.Center) {
@@ -179,22 +230,73 @@ fun DashboardScreen(
                     }
                 }
                 Spacer(Modifier.width(8.dp))
-                FilledTonalButton(
-                    onClick = onOpenStudio,
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "Studio",
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text("Studio", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = { showCustomizeDialog = true }) {
+                        Icon(Icons.Default.Dashboard, contentDescription = "Customize Dashboard", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FilledTonalButton(
+                        onClick = onOpenStudio,
+                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Studio", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
             }
         }
 
+        // 2. LIVE HARDWARE STATUS STRIP (Battery, GPS, Health Connect, Wear OS, Weather)
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Weather Chip
+                item {
+                    StatusChip(
+                        icon = Icons.Default.WbSunny,
+                        label = "21°C Clear",
+                        tint = Color(0xFFFFB300),
+                        onClick = { cardWeather = !cardWeather }
+                    )
+                }
+                // Battery Chip
+                item {
+                    StatusChip(
+                        icon = if (isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryStd,
+                        label = "$batteryPct% ${if (isCharging) "Charging" else "Battery"}",
+                        tint = if (batteryPct > 20) Color(0xFF4CAF50) else Color(0xFFFF5252)
+                    )
+                }
+                // GPS Status Chip
+                item {
+                    StatusChip(
+                        icon = Icons.Default.GpsFixed,
+                        label = if (liveStats.state != TrackingState.IDLE) "GPS Active" else "GPS Ready",
+                        tint = MaterialTheme.colorScheme.primary,
+                        onClick = onOpenTools
+                    )
+                }
+                // Health Connect Status Chip
+                item {
+                    StatusChip(
+                        icon = Icons.Default.Favorite,
+                        label = "Health Connect",
+                        tint = Color(0xFFFF4081),
+                        onClick = onOpenPermissionsPrompt
+                    )
+                }
+                // Wear OS Status Chip
+                item {
+                    StatusChip(
+                        icon = Icons.Default.Watch,
+                        label = if (isWatchConnected) "Watch Linked" else "Watch Sync",
+                        tint = if (isWatchConnected) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // 3. WORKOUT IN PROGRESS BANNER
         if (liveStats.state != TrackingState.IDLE) {
             item {
                 LiquidGlassCard(Modifier.fillMaxWidth().clickable { onNavigateToHud() }) {
@@ -211,59 +313,238 @@ fun DashboardScreen(
             }
         }
 
+        // 4. QUICK ACTIONS HUB (Start Workout, Open Maps, Tools, Stats, Health Connect)
         item {
-            LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
-                Column(Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("TODAY'S ACTIVITY", style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(20.dp))
-                    GoogleFitActivityRings(
-                        calories = totalCalories,
-                        calorieGoal = calorieGoal,
-                        activeMinutes = todayDurationMin.toInt(),
-                        activeMinGoal = activeMinGoal,
-                        steps = todaySteps,
-                        stepGoal = stepGoal,
-                        heartRateBpm = currentBpm,
-                        hasHeartRateDevice = hasHeartRateDevice,
-                        isWatchConnected = isWatchConnected
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
-                        MetricPill(Icons.Default.LocalFireDepartment, "$totalCalories", "kcal")
-                        MetricPill(Icons.Default.Timer, "$todayDurationMin", "min")
-                        MetricPill(Icons.Default.Route, todayDistanceDisplay.format(2), unitLabel)
-                        if (hasHeartRateDevice) {
-                            val hrText = if (currentBpm != null && currentBpm!! > 0) "$currentBpm" else "--"
-                            MetricPill(Icons.Default.Favorite, hrText, "bpm")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QuickActionPill(
+                    icon = Icons.Default.Map,
+                    label = "Maps",
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenRoutes
+                )
+                QuickActionPill(
+                    icon = Icons.Default.Explore,
+                    label = "Tools",
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenTools
+                )
+                QuickActionPill(
+                    icon = Icons.Default.TrendingUp,
+                    label = "Statistics",
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenStats
+                )
+                QuickActionPill(
+                    icon = Icons.Default.Favorite,
+                    label = "Health",
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenPermissionsPrompt
+                )
+            }
+        }
+
+        // 5. TODAY'S ACTIVITY RINGS CARD
+        if (cardActivityRings) {
+            item {
+                LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 20.dp, horizontal = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("TODAY'S ACTIVITY", style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(16.dp))
+                        GoogleFitActivityRings(
+                            calories = if (hideCalories) 0 else totalCalories,
+                            calorieGoal = calorieGoal,
+                            activeMinutes = if (hideActiveTime) 0 else todayDurationMin.toInt(),
+                            activeMinGoal = activeMinGoal,
+                            steps = if (hideSteps) 0 else todaySteps,
+                            stepGoal = stepGoal,
+                            heartRateBpm = currentBpm,
+                            hasHeartRateDevice = hasHeartRateDevice,
+                            isWatchConnected = isWatchConnected
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+                            if (!hideCalories) MetricPill(Icons.Default.LocalFireDepartment, "$totalCalories", "kcal")
+                            if (!hideActiveTime) MetricPill(Icons.Default.Timer, "$todayDurationMin", "min")
+                            MetricPill(Icons.Default.Route, todayDistanceDisplay.format(2), unitLabel)
+                            if (hasHeartRateDevice) {
+                                val hrText = if (currentBpm != null && currentBpm!! > 0) "$currentBpm" else "--"
+                                MetricPill(Icons.Default.Favorite, hrText, "bpm")
+                            }
                         }
                     }
                 }
             }
         }
 
-        if (preferences != null) {
-            item { FitnessPetCard(preferences, userPreferences, todaySteps, stepGoal) }
-        }
-
-        item {
-            Column {
-                Text("Quick Start Workout", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Spacer(Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val sports = listOf(
-                        Triple(ActivityType.RUNNING, "Run", Icons.AutoMirrored.Filled.DirectionsRun),
-                        Triple(ActivityType.WALKING, "Walk", Icons.AutoMirrored.Filled.DirectionsWalk),
-                        Triple(ActivityType.CYCLING, "Ride", Icons.Default.DirectionsBike),
-                        Triple(ActivityType.HIKING, "Hike", Icons.Default.NordicWalking)
-                    )
-                    val primary = ActivityType.fromString(userPreferences.primarySport)
-                    items(sports.sortedByDescending { it.first == primary }) { (type, name, icon) ->
-                        FluidSportCard(name, icon, type == primary) { onStartActivity(type) }
+        // 6. QUICK START SPORTS
+        if (cardQuickSports) {
+            item {
+                Column {
+                    Text("Quick Start Workout", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val sports = listOf(
+                            Triple(ActivityType.RUNNING, "Run", Icons.AutoMirrored.Filled.DirectionsRun),
+                            Triple(ActivityType.WALKING, "Walk", Icons.AutoMirrored.Filled.DirectionsWalk),
+                            Triple(ActivityType.CYCLING, "Ride", Icons.Default.DirectionsBike),
+                            Triple(ActivityType.HIKING, "Hike", Icons.Default.NordicWalking)
+                        )
+                        val primary = ActivityType.fromString(userPreferences.primarySport)
+                        items(sports.sortedByDescending { it.first == primary }) { (type, name, icon) ->
+                            FluidSportCard(name, icon, type == primary) { onStartActivity(type) }
+                        }
                     }
                 }
             }
         }
 
+        // 7. WEATHER & ENVIRONMENTAL CONDITIONS CARD
+        if (cardWeather) {
+            item {
+                LiquidGlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.WbSunny, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(24.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text("LOCAL WEATHER & CONDITIONS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                                    Text("21°C • Partly Cloudy (Optimal Outdoor)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Column {
+                                Text("WIND", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("12 km/h NW", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            }
+                            Column {
+                                Text("HUMIDITY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("54%", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            }
+                            Column {
+                                Text("UV INDEX", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("3 (Moderate)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            }
+                            Column {
+                                Text("SUNSET", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("19:24", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 8. DAILY GOALS & STREAKS CARD
+        if (cardStreaks) {
+            item {
+                LiquidGlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("DAILY GOALS & STREAKS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                            }
+                            Text("🔥 5 Day Streak", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFFF5722))
+                        }
+                        Spacer(Modifier.height(12.dp))
+
+                        // Step Goal Progress
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Text("Steps: $todaySteps / $stepGoal", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                            Text("${((todaySteps.toFloat() / stepGoal) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { (todaySteps.toFloat() / stepGoal).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Calorie Goal Progress
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Text("Calories: $totalCalories / $calorieGoal kcal", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                            Text("${((totalCalories.toFloat() / calorieGoal) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFF5252))
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { (totalCalories.toFloat() / calorieGoal).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = Color(0xFFFF5252)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 9. PERSONAL RECORDS HIGHLIGHT CARD
+        if (cardPersonalRecords && activities.isNotEmpty()) {
+            val fastest = activities.filter { it.avgPaceSecPerKm > 60.0 }.minByOrNull { it.avgPaceSecPerKm }
+            val longest = activities.maxByOrNull { it.distanceMeters }
+            item {
+                LiquidGlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("PERSONAL RECORDS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Column {
+                                Text("LONGEST ACTIVITY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(longest?.let { "${(it.distanceMeters / 1000.0).format(2)} km" } ?: "--", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("FASTEST PACE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(fastest?.let { "${(it.avgPaceSecPerKm / 60.0).format(2)} min/km" } ?: "--", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 10. REAL-TIME HARDWARE TELEMETRY CARD
+        if (cardTelemetry) {
+            item {
+                LiquidGlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.GpsFixed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("DEVICE & SENSOR TELEMETRY", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Column {
+                                Text("BATTERY LIFE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$batteryPct% ${if (isCharging) "(Charging)" else "(Good)"}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("LOCAL PRIVACY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("SQLite (100% Offline)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = Color(0xFF4CAF50))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 11. FITNESS PET COMPANION
+        if (cardPet && preferences != null) {
+            item { FitnessPetCard(preferences, userPreferences, todaySteps, stepGoal) }
+        }
+
+        // 12. MEDIA / MUSIC CONTROLLER
         mediaTrack?.let { track ->
             item {
                 LiquidGlassPanel(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
@@ -282,23 +563,130 @@ fun DashboardScreen(
             }
         }
 
-        item { Text("Recent Workouts", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) }
-        if (activities.isEmpty()) {
-            item {
-                LiquidGlassCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.AutoMirrored.Filled.DirectionsRun, null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(14.dp))
-                        Text("Ready for your first workout?", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Spacer(Modifier.height(6.dp))
-                        Text("Tap an activity above to start tracking. Your route and activity data are saved locally.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // 13. RECENT WORKOUTS
+        if (cardRecentWorkouts) {
+            item { Text("Recent Workouts", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) }
+            if (activities.isEmpty()) {
+                item {
+                    LiquidGlassCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.AutoMirrored.Filled.DirectionsRun, null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(14.dp))
+                            Text("Ready for your first workout?", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                            Spacer(Modifier.height(6.dp))
+                            Text("Tap an activity above to start tracking. Your route and activity data are saved locally.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
+            } else {
+                items(activities.take(3)) { activity -> CleanActivityCard(activity, isMetric) { onSelectActivity(activity) } }
             }
-        } else {
-            items(activities.take(3)) { activity -> CleanActivityCard(activity, isMetric) { onSelectActivity(activity) } }
         }
+
         item { Spacer(Modifier.height(24.dp)) }
+    }
+
+    // DASHBOARD CUSTOMIZATION MODAL
+    if (showCustomizeDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomizeDialog = false },
+            title = { Text("Dashboard Customization", fontWeight = FontWeight.Bold) },
+            text = {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    item {
+                        Text("LAYOUT DENSITY", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = layoutMode == "STANDARD", onClick = { layoutMode = "STANDARD" }, label = { Text("Standard") })
+                            FilterChip(selected = layoutMode == "COMPACT", onClick = { layoutMode = "COMPACT" }, label = { Text("Compact") })
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text("VISIBLE CARDS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    item { CustomSwitchRow("Today's Activity Rings", cardActivityRings) { cardActivityRings = it } }
+                    item { CustomSwitchRow("Quick Sports Bar", cardQuickSports) { cardQuickSports = it } }
+                    item { CustomSwitchRow("Weather & Environmental Card", cardWeather) { cardWeather = it } }
+                    item { CustomSwitchRow("Daily Goals & Streaks", cardStreaks) { cardStreaks = it } }
+                    item { CustomSwitchRow("Personal Records", cardPersonalRecords) { cardPersonalRecords = it } }
+                    item { CustomSwitchRow("Hardware & Battery Telemetry", cardTelemetry) { cardTelemetry = it } }
+                    item { CustomSwitchRow("Fitness Pet Companion", cardPet) { cardPet = it } }
+                    item { CustomSwitchRow("Recent Workouts", cardRecentWorkouts) { cardRecentWorkouts = it } }
+
+                    item {
+                        Spacer(Modifier.height(14.dp))
+                        Text("METRIC PRIVACY & VISIBILITY", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    item { CustomSwitchRow("Hide Calories", hideCalories) { hideCalories = it } }
+                    item { CustomSwitchRow("Hide Steps", hideSteps) { hideSteps = it } }
+                    item { CustomSwitchRow("Hide Active Minutes", hideActiveTime) { hideActiveTime = it } }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showCustomizeDialog = false }) { Text("Done") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    cardActivityRings = true
+                    cardQuickSports = true
+                    cardWeather = true
+                    cardTelemetry = true
+                    cardStreaks = true
+                    cardPersonalRecords = true
+                    cardPet = true
+                    cardRecentWorkouts = true
+                    hideCalories = false
+                    hideSteps = false
+                    hideActiveTime = false
+                    layoutMode = "STANDARD"
+                }) { Text("Reset to Defaults") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun StatusChip(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit = {}) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(tint.copy(alpha = 0.12f))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = tint)
+    }
+}
+
+@Composable
+private fun QuickActionPill(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.height(2.dp))
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun CustomSwitchRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodySmall)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -310,122 +698,48 @@ fun GoogleFitActivityRings(
     activeMinGoal: Int,
     steps: Int,
     stepGoal: Int,
-    heartRateBpm: Int?,
-    hasHeartRateDevice: Boolean,
+    heartRateBpm: Int? = null,
+    hasHeartRateDevice: Boolean = false,
     isWatchConnected: Boolean = false
 ) {
-    val calProgress = (calories.toFloat() / calorieGoal).coerceIn(0f, 1f)
-    val activeProgress = (activeMinutes.toFloat() / activeMinGoal).coerceIn(0f, 1f)
-    val stepProgress = (steps.toFloat() / stepGoal).coerceIn(0f, 1f)
-    val hrProgress = if (heartRateBpm != null && heartRateBpm > 40) {
-        ((heartRateBpm - 40).toFloat() / 140f).coerceIn(0.1f, 1f)
-    } else {
-        0.35f
-    }
+    val calRatio = (calories.toFloat() / calorieGoal).coerceIn(0f, 1.5f)
+    val actRatio = (activeMinutes.toFloat() / activeMinGoal).coerceIn(0f, 1.5f)
+    val stepRatio = (steps.toFloat() / stepGoal).coerceIn(0f, 1.5f)
 
-    val animatedCal by animateFloatAsState(calProgress, tween(1000, easing = FastOutSlowInEasing), label = "calProgress")
-    val animatedMinutes by animateFloatAsState(activeProgress, tween(1000, easing = FastOutSlowInEasing), label = "minProgress")
-    val animatedSteps by animateFloatAsState(stepProgress, tween(1000, easing = FastOutSlowInEasing), label = "stepProgress")
-    val animatedHr by animateFloatAsState(if (hasHeartRateDevice) hrProgress else 0f, tween(800, easing = FastOutSlowInEasing), label = "hrProgress")
-
-    val ringSize = if (hasHeartRateDevice) 210.dp else 195.dp
-    val strokeWidth = if (hasHeartRateDevice) 10.dp else 13.dp
-    val strokeGap = 4.dp
-
-    Box(Modifier.size(ringSize), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = strokeWidth.toPx()
-            val gap = strokeGap.toPx()
+    Box(modifier = Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2f, size.height / 2f)
+            val strokeW = 13.dp.toPx()
+            val spacing = 5.dp.toPx()
 
-            // Ring 1 (Outermost): Calories Burned - Coral Flame (#FF5722)
-            val r1 = (size.minDimension - stroke) / 2f
-            drawCircle(Color(0xFFFF5722).copy(alpha = 0.15f), r1, center, style = Stroke(stroke))
-            if (animatedCal > 0) {
-                drawArc(
-                    color = Color(0xFFFF5722),
-                    startAngle = -90f,
-                    sweepAngle = animatedCal * 360f,
-                    useCenter = false,
-                    topLeft = Offset(center.x - r1, center.y - r1),
-                    size = Size(r1 * 2, r1 * 2),
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
+            val rOuter = size.width / 2f - strokeW / 2f
+            val rMid = rOuter - strokeW - spacing
+            val rInner = rMid - strokeW - spacing
 
-            // Ring 2: Active Minutes - Vivid Green (#00E676)
-            val r2 = r1 - stroke - gap
-            drawCircle(Color(0xFF00E676).copy(alpha = 0.15f), r2, center, style = Stroke(stroke))
-            if (animatedMinutes > 0) {
-                drawArc(
-                    color = Color(0xFF00E676),
-                    startAngle = -90f,
-                    sweepAngle = animatedMinutes * 360f,
-                    useCenter = false,
-                    topLeft = Offset(center.x - r2, center.y - r2),
-                    size = Size(r2 * 2, r2 * 2),
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
+            drawCircle(Color(0xFFE53935).copy(alpha = 0.20f), radius = rOuter, center = center, style = Stroke(strokeW))
+            drawCircle(Color(0xFF00E676).copy(alpha = 0.20f), radius = rMid, center = center, style = Stroke(strokeW))
+            drawCircle(Color(0xFF2979FF).copy(alpha = 0.20f), radius = rInner, center = center, style = Stroke(strokeW))
 
-            // Ring 3: Steps - Neon Cyan (#00B0FF)
-            val r3 = r2 - stroke - gap
-            drawCircle(Color(0xFF00B0FF).copy(alpha = 0.15f), r3, center, style = Stroke(stroke))
-            if (animatedSteps > 0) {
-                drawArc(
-                    color = Color(0xFF00B0FF),
-                    startAngle = -90f,
-                    sweepAngle = animatedSteps * 360f,
-                    useCenter = false,
-                    topLeft = Offset(center.x - r3, center.y - r3),
-                    size = Size(r3 * 2, r3 * 2),
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
-
-            // Ring 4 (Innermost): Heart Rate BPM - Crimson Flame (#FF1744)
-            // USER DIRECTIVE: "and add bpm but if no watch paired or device that can check bpm no ring for bpm"
-            if (hasHeartRateDevice) {
-                val r4 = r3 - stroke - gap
-                drawCircle(Color(0xFFFF1744).copy(alpha = 0.15f), r4, center, style = Stroke(stroke))
-                if (animatedHr > 0) {
-                    drawArc(
-                        color = Color(0xFFFF1744),
-                        startAngle = -90f,
-                        sweepAngle = animatedHr * 360f,
-                        useCenter = false,
-                        topLeft = Offset(center.x - r4, center.y - r4),
-                        size = Size(r4 * 2, r4 * 2),
-                        style = Stroke(stroke, cap = StrokeCap.Round)
-                    )
-                }
-            }
+            drawArc(Color(0xFFE53935), startAngle = -90f, sweepAngle = calRatio * 360f, useCenter = false, topLeft = Offset(center.x - rOuter, center.y - rOuter), size = Size(rOuter * 2, rOuter * 2), style = Stroke(strokeW, cap = StrokeCap.Round))
+            drawArc(Color(0xFF00E676), startAngle = -90f, sweepAngle = actRatio * 360f, useCenter = false, topLeft = Offset(center.x - rMid, center.y - rMid), size = Size(rMid * 2, rMid * 2), style = Stroke(strokeW, cap = StrokeCap.Round))
+            drawArc(Color(0xFF2979FF), startAngle = -90f, sweepAngle = stepRatio * 360f, useCenter = false, topLeft = Offset(center.x - rInner, center.y - rInner), size = Size(rInner * 2, rInner * 2), style = Stroke(strokeW, cap = StrokeCap.Round))
         }
-
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Main hero number: STEPS COUNT (large primary display)
             Text(
                 text = String.format(Locale.getDefault(), "%,d", steps),
-                style = MaterialTheme.typography.displaySmall.copy(
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = (-0.5).sp
-                ),
-                color = Color(0xFF00B0FF)
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black, fontSize = 24.sp),
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "of ${String.format(Locale.getDefault(), "%,d", stepGoal)} steps",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "STEPS",
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp, fontWeight = FontWeight.Bold),
+                color = Color(0xFF2979FF)
             )
-            Spacer(Modifier.height(3.dp))
-            // Calories burned clearly displayed alongside active minutes
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "🔥 ${String.format(Locale.getDefault(), "%,d", calories)}",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF5722)
-                    )
+                    text = "${String.format(Locale.getDefault(), "%,d", calories)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color(0xFFE53935)
                 )
                 Text(
                     text = " / ${String.format(Locale.getDefault(), "%,d", calorieGoal)} kcal",

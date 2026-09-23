@@ -1,6 +1,8 @@
 package com.example.miles.ui.settings
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -9,9 +11,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,15 +43,19 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
@@ -83,10 +92,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.miles.data.local.AppIconOption
 import com.example.miles.data.local.BaseThemeOption
 import com.example.miles.data.local.ColorVisionMode
@@ -112,7 +123,8 @@ enum class SettingsCategory(val label: String, val icon: ImageVector) {
     ACCESSIBILITY("Accessibility", Icons.Default.AccessibilityNew),
     SENSORS("Sensors & Watch", Icons.Default.Sensors),
     PRIVACY("Privacy & Storage", Icons.Default.Lock),
-    STUDIO("Miles Studio", Icons.Default.Code)
+    STUDIO("Miles Studio", Icons.Default.Code),
+    ABOUT("About & FOSS", Icons.Default.Info)
 }
 
 @Composable
@@ -122,6 +134,8 @@ fun SettingsScreen(
     onOpenStudio: () -> Unit,
     onOpenDevices: () -> Unit = {},
     onRerunSetup: () -> Unit = {},
+    onOpenPermissionsPrompt: () -> Unit = {},
+    onOpenTools: () -> Unit = {},
     healthConnectState: HealthConnectConnectionState = HealthConnectConnectionState.UNAVAILABLE,
     onRequestHealthConnectPermissions: () -> Unit = {},
     onOpenHealthConnectSettings: () -> Unit = {},
@@ -145,6 +159,8 @@ fun SettingsScreen(
     var showWipeConfirmDialog by remember { mutableStateOf(false) }
     var showResetDefaultsDialog by remember { mutableStateOf(false) }
     var showPetDialog by remember { mutableStateOf(false) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
+    var showChangelogDialog by remember { mutableStateOf(false) }
 
     // Biometrics edit states
     var nameInput by remember(userPrefs.userName) { mutableStateOf(userPrefs.userName) }
@@ -693,6 +709,7 @@ fun SettingsScreen(
                     HealthConnectSettingsCard(
                         state = healthConnectState,
                         onRequestPermissions = onRequestHealthConnectPermissions,
+                        onOpenPermissionsPrompt = onOpenPermissionsPrompt,
                         onOpenSettings = onOpenHealthConnectSettings,
                         canOpenSettings = canOpenHealthConnectSettings
                     )
@@ -715,7 +732,8 @@ fun SettingsScreen(
                         onOpenBackup = { showBackupDialog = true },
                         onOpenTrash = { showTrashDialog = true },
                         onWipeData = { showWipeConfirmDialog = true },
-                        onResetDefaults = { showResetDefaultsDialog = true }
+                        onResetDefaults = { showResetDefaultsDialog = true },
+                        onOpenPermissionsPrompt = onOpenPermissionsPrompt
                     )
                 }
             }
@@ -724,6 +742,18 @@ fun SettingsScreen(
             if (shouldShow(SettingsCategory.STUDIO, "studio", "kalman", "gnss", "developer", "math", "vdot", "nmea", "telemetry")) {
                 item {
                     StudioShortcutCard(onOpenStudio = onOpenStudio)
+                }
+            }
+
+            // 11. ABOUT & FOSS
+            if (shouldShow(SettingsCategory.ABOUT, "about", "foss", "version", "license", "open source", "changelog", "credits", "github")) {
+                item {
+                    AboutMilesCard(
+                        onRerunSetup = onRerunSetup,
+                        onShowLicenses = { showLicensesDialog = true },
+                        onShowChangelog = { showChangelogDialog = true },
+                        onOpenTools = onOpenTools
+                    )
                 }
             }
 
@@ -756,7 +786,10 @@ fun SettingsScreen(
         }
 
         if (showBackupDialog) {
-            BackupRestoreDialog(onDismiss = { showBackupDialog = false })
+            BackupRestoreDialog(
+                preferences = preferences,
+                onDismiss = { showBackupDialog = false }
+            )
         }
 
         if (showTrashDialog) {
@@ -801,6 +834,14 @@ fun SettingsScreen(
                 }
             )
         }
+
+        if (showLicensesDialog) {
+            LicensesDialog(onDismiss = { showLicensesDialog = false })
+        }
+
+        if (showChangelogDialog) {
+            ChangelogDialog(onDismiss = { showChangelogDialog = false })
+        }
     }
 }
 
@@ -808,6 +849,7 @@ fun SettingsScreen(
 private fun HealthConnectSettingsCard(
     state: HealthConnectConnectionState,
     onRequestPermissions: () -> Unit,
+    onOpenPermissionsPrompt: () -> Unit = {},
     onOpenSettings: () -> Unit,
     canOpenSettings: Boolean
 ) {
@@ -829,9 +871,13 @@ private fun HealthConnectSettingsCard(
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(description, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+            FilledTonalButton(onClick = onOpenPermissionsPrompt) {
+                Text("Open Health Connect Permissions")
+            }
             if (state == HealthConnectConnectionState.AVAILABLE_NOT_PERMITTED) {
-                Spacer(modifier = Modifier.height(12.dp))
-                FilledTonalButton(onClick = onRequestPermissions) { Text("Grant Health Connect access") }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(onClick = onRequestPermissions) { Text("Request System Health Connect") }
             }
             if (canOpenSettings) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -878,4 +924,224 @@ fun triggerHaptic(vibrator: Vibrator?) {
         @Suppress("DEPRECATION")
         vibrator.vibrate(50)
     }
+}
+
+@Composable
+fun AboutMilesCard(
+    onRerunSetup: () -> Unit,
+    onShowLicenses: () -> Unit,
+    onShowChangelog: () -> Unit,
+    onOpenTools: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_miles_logo),
+                        contentDescription = "MILES Logo",
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            "MILES",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "v1.0.3 (Build 2) • F-Droid Release",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "Modern, privacy-focused, local-first fitness & activity tracker. 100% Kotlin & Jetpack Compose with zero mandatory cloud accounts, zero ads, zero telemetry, and pure local SQLite storage.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("100% FOSS", "Local SQLite", "OpenStreetMap", "Health Connect").forEach { badge ->
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = badge,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onShowChangelog,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Changelog")
+                }
+                OutlinedButton(
+                    onClick = onShowLicenses,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Licenses")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onRerunSetup,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Setup Guide")
+                }
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            Toast.makeText(context, "No web browser found", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Source Code")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            FilledTonalButton(
+                onClick = onOpenTools,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Explore, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Compass, Altimeter & GNSS Diagnostics")
+            }
+        }
+    }
+}
+
+@Composable
+fun ChangelogDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "MILES v1.0.3 Changelog",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "F-Droid Preparation Release (v1.0.3 / Build 2)",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "• Removed proprietary Google/Firebase dependencies\n" +
+                    "• Replaced Google Play Services location with native Android LocationManager\n" +
+                    "• Updated release version and fastlane metadata\n" +
+                    "• Improved source-build compatibility and offline reliability\n" +
+                    "• Local-first Room SQLite storage architecture\n" +
+                    "• Enhanced Health Connect standalone integration\n" +
+                    "• Support for GPX, TCX, GeoJSON, and FIT export\n" +
+                    "• Customizable liquid glass M3 themes and dark modes",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+fun LicensesDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Open-Source Licenses",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "MILES Application\n" +
+                    "Licensed under the Apache License, Version 2.0\n\n" +
+                    "Third-Party Dependencies & Data:\n\n" +
+                    "• AndroidX & Jetpack Compose\n" +
+                    "  Apache License 2.0 (Google LLC)\n\n" +
+                    "• Room Persistence Library\n" +
+                    "  Apache License 2.0 (Google LLC)\n\n" +
+                    "• Kotlin Coroutines & Flow\n" +
+                    "  Apache License 2.0 (JetBrains s.r.o.)\n\n" +
+                    "• OpenStreetMap\n" +
+                    "  Open Database License (ODbL) © OpenStreetMap contributors\n\n" +
+                    "• OsmDroid\n" +
+                    "  Apache License 2.0\n\n" +
+                    "• Health Connect Client\n" +
+                    "  Apache License 2.0\n\n" +
+                    "• Coil Image Loader\n" +
+                    "  Apache License 2.0",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }

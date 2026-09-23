@@ -77,6 +77,7 @@ import com.example.miles.ui.setup.PermissionPromptScreen
 import com.example.miles.ui.studio.DistanceCalculatorScreen
 import com.example.miles.ui.studio.MilesStudioScreen
 import com.example.miles.ui.theme.MilesTheme
+import com.example.miles.ui.tools.ToolsDiagnosticsScreen
 import com.example.miles.ui.training.ProgressiveTrainingScreen
 import com.example.miles.ui.workout.WorkoutHudScreen
 import com.example.miles.wear.WearCompanionManager
@@ -86,7 +87,7 @@ enum class MilesNavigationTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home), TRAINING("Training", Icons.Default.FitnessCenter), JOURNAL("Journal", Icons.AutoMirrored.Filled.List), ROUTES("Routes", Icons.Default.Map), PROFILE("Profile", Icons.Default.Person)
 }
 
-enum class MilesSubScreen { NONE, SETUP, ACTIVITY_DETAIL, WORKOUT_HUD, DEVICES, STUDIO, DISTANCE_CALCULATOR }
+enum class MilesSubScreen { NONE, SETUP, ACTIVITY_DETAIL, WORKOUT_HUD, DEVICES, STUDIO, DISTANCE_CALCULATOR, PERMISSIONS_PROMPT, TOOLS }
 
 class MainActivity : ComponentActivity() {
     private lateinit var database: MilesDatabase
@@ -116,6 +117,8 @@ class MainActivity : ComponentActivity() {
         moveReminderManager = MoveReminderManager(this, preferences)
         healthConnectManager = HealthConnectManager(this)
         moveReminderManager.scheduleNextReminder()
+        com.example.miles.widget.MilesWidgetSyncReceiver.schedulePeriodicSync(this)
+        com.example.miles.widget.MilesWidgetSyncReceiver.syncWidgetsNow(this)
 
         setContent {
             val userPrefs by preferences.userPreferences.collectAsState()
@@ -224,6 +227,7 @@ class MainActivity : ComponentActivity() {
 
                 BackHandler(enabled = true) {
                     when {
+                        subScreen == MilesSubScreen.PERMISSIONS_PROMPT -> subScreen = MilesSubScreen.NONE
                         subScreen == MilesSubScreen.DISTANCE_CALCULATOR -> subScreen = MilesSubScreen.STUDIO
                         subScreen == MilesSubScreen.ACTIVITY_DETAIL -> subScreen = MilesSubScreen.NONE
                         subScreen == MilesSubScreen.STUDIO -> subScreen = MilesSubScreen.NONE
@@ -252,6 +256,9 @@ class MainActivity : ComponentActivity() {
                         onAllow = {
                             preferences.markPermissionPromptShown()
                             allPermissionsLauncher.launch(requiredPermissions)
+                            if (healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
+                                requestHealthConnectPermissions()
+                            }
                         },
                         onDeny = {
                             preferences.markPermissionPromptShown()
@@ -280,6 +287,20 @@ class MainActivity : ComponentActivity() {
                                     MilesSubScreen.DEVICES -> DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion, preferences = preferences, moveReminderManager = moveReminderManager)
                                     MilesSubScreen.STUDIO -> MilesStudioScreen(repository = repository, smartEngine = smartEngine, wearCompanion = wearCompanion, preferences = preferences, onBack = { subScreen = MilesSubScreen.NONE }, onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR })
                                     MilesSubScreen.DISTANCE_CALCULATOR -> DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
+                                    MilesSubScreen.PERMISSIONS_PROMPT -> PermissionPromptScreen(
+                                        onAllow = {
+                                            preferences.markPermissionPromptShown()
+                                            allPermissionsLauncher.launch(requiredPermissions)
+                                            if (healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
+                                                requestHealthConnectPermissions()
+                                            }
+                                            subScreen = MilesSubScreen.NONE
+                                        },
+                                        onDeny = {
+                                            subScreen = MilesSubScreen.NONE
+                                        }
+                                    )
+                                    MilesSubScreen.TOOLS -> ToolsDiagnosticsScreen(onBack = { subScreen = MilesSubScreen.NONE })
                                     MilesSubScreen.SETUP -> Unit
                                     MilesSubScreen.NONE -> when (currentTab) {
                                         MilesNavigationTab.HOME -> DashboardScreen(
@@ -302,7 +323,11 @@ class MainActivity : ComponentActivity() {
                                                 selectedActivity = act
                                                 subScreen = MilesSubScreen.ACTIVITY_DETAIL
                                             },
-                                            onOpenStudio = { subScreen = MilesSubScreen.STUDIO }
+                                            onOpenStudio = { subScreen = MilesSubScreen.STUDIO },
+                                            onOpenTools = { subScreen = MilesSubScreen.TOOLS },
+                                            onOpenPermissionsPrompt = { subScreen = MilesSubScreen.PERMISSIONS_PROMPT },
+                                            onOpenRoutes = { currentTab = MilesNavigationTab.ROUTES },
+                                            onOpenStats = { currentTab = MilesNavigationTab.JOURNAL }
                                         )
                                         MilesNavigationTab.JOURNAL -> JournalScreen(
                                             activities = activities,
@@ -313,7 +338,19 @@ class MainActivity : ComponentActivity() {
                                         )
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
-                                        MilesNavigationTab.PROFILE -> SettingsScreen(preferences = preferences, repository = repository, onOpenStudio = { subScreen = MilesSubScreen.STUDIO }, onOpenDevices = { subScreen = MilesSubScreen.DEVICES }, onRerunSetup = { subScreen = MilesSubScreen.SETUP }, healthConnectState = healthConnectState, onRequestHealthConnectPermissions = requestHealthConnectPermissions, onOpenHealthConnectSettings = openHealthConnectSettings, canOpenHealthConnectSettings = healthConnectManager.manageDataIntent() != null)
+                                        MilesNavigationTab.PROFILE -> SettingsScreen(
+                                            preferences = preferences,
+                                            repository = repository,
+                                            onOpenStudio = { subScreen = MilesSubScreen.STUDIO },
+                                            onOpenDevices = { subScreen = MilesSubScreen.DEVICES },
+                                            onRerunSetup = { subScreen = MilesSubScreen.SETUP },
+                                            onOpenPermissionsPrompt = { subScreen = MilesSubScreen.PERMISSIONS_PROMPT },
+                                            onOpenTools = { subScreen = MilesSubScreen.TOOLS },
+                                            healthConnectState = healthConnectState,
+                                            onRequestHealthConnectPermissions = requestHealthConnectPermissions,
+                                            onOpenHealthConnectSettings = openHealthConnectSettings,
+                                            canOpenHealthConnectSettings = healthConnectManager.manageDataIntent() != null
+                                        )
                                     }
                                 }
                             }

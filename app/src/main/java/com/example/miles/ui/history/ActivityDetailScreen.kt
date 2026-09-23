@@ -15,11 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FastForward
@@ -42,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -98,6 +102,8 @@ fun ActivityDetailScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
     var showEditNotesDialog by remember { mutableStateOf(false) }
+    var showCompareDialog by remember { mutableStateOf(false) }
+    val allActivities by repository.activities.collectAsState(initial = emptyList())
     var currentNotes by remember { mutableStateOf(activity.notes) }
     var isFavorite by remember { mutableStateOf(activity.isFavorite) }
     var mapStyle by remember { mutableStateOf(MapStyleMode.STANDARD) }
@@ -352,11 +358,11 @@ fun ActivityDetailScreen(
             }
         }
 
-        // Action Buttons: Ghost Reference & Data Repair
+        // Action Buttons: Ghost Reference, Compare & Data Repair
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilledTonalButton(
                     onClick = {
@@ -365,7 +371,16 @@ fun ActivityDetailScreen(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Set Ghost Pacer")
+                    Text("Ghost Pacer", fontSize = 12.sp)
+                }
+
+                FilledTonalButton(
+                    onClick = { showCompareDialog = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.CompareArrows, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Compare", fontSize = 12.sp)
                 }
 
                 Button(
@@ -378,8 +393,8 @@ fun ActivityDetailScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Data Repair")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Repair", fontSize = 12.sp)
                 }
             }
         }
@@ -389,14 +404,14 @@ fun ActivityDetailScreen(
         }
     }
 
-    // Export Dialog (GPX, TCX, JSON)
+    // Export Dialog (GPX, TCX, KML, GeoJSON, CSV, Native JSON)
     if (showExportDialog) {
         AlertDialog(
             onDismissRequest = { showExportDialog = false },
             title = { Text("Export Activity", fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Choose an open, privacy-preserving standard format for external tools, Strava, or backup:")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose an open, privacy-preserving standard format for external tools, Strava, Garmin, or backup:")
                     FilledTonalButton(
                         onClick = {
                             scope.launch {
@@ -407,26 +422,135 @@ fun ActivityDetailScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Export as GPX (GPS Exchange Format)")
+                        Text("GPX (GPS Exchange Format)")
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            scope.launch {
+                                val tcx = repository.exportActivityAsTcx(activity.id)
+                                Toast.makeText(context, "Exported TCX (${tcx.length} chars)", Toast.LENGTH_SHORT).show()
+                                showExportDialog = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("TCX (Garmin Training Center)")
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            scope.launch {
+                                val kml = repository.exportActivityAsKml(activity.id)
+                                Toast.makeText(context, "Exported KML (${kml.length} chars)", Toast.LENGTH_SHORT).show()
+                                showExportDialog = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("KML (Google Earth & Maps.me)")
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            scope.launch {
+                                val geojson = repository.exportActivityAsGeoJson(activity.id)
+                                Toast.makeText(context, "Exported GeoJSON (${geojson.length} chars)", Toast.LENGTH_SHORT).show()
+                                showExportDialog = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("GeoJSON (Open GIS Standard)")
                     }
 
                     FilledTonalButton(
                         onClick = {
                             scope.launch {
                                 val json = repository.exportActivityAsJson(activity.id)
-                                Toast.makeText(context, "Exported MILES Native JSON", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Exported Native JSON", Toast.LENGTH_SHORT).show()
                                 showExportDialog = false
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Export as Native JSON")
+                        Text("Native MILES JSON (Full Telemetry)")
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showExportDialog = false }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    // Workout Comparison Dialog
+    if (showCompareDialog) {
+        val otherActivities = remember(allActivities, activity.id) {
+            allActivities.filter { it.id != activity.id }
+        }
+        var selectedOtherActivity by remember { mutableStateOf(otherActivities.firstOrNull()) }
+
+        AlertDialog(
+            onDismissRequest = { showCompareDialog = false },
+            title = { Text("Side-by-Side Workout Comparison", fontWeight = FontWeight.Bold) },
+            text = {
+                if (otherActivities.isEmpty()) {
+                    Text("Record at least one other activity to compare performance side-by-side.")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Select comparison baseline:", style = MaterialTheme.typography.labelMedium)
+
+                        // Selector chips
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(otherActivities) { other ->
+                                androidx.compose.material3.FilterChip(
+                                    selected = selectedOtherActivity?.id == other.id,
+                                    onClick = { selectedOtherActivity = other },
+                                    label = { Text(other.title, fontSize = 11.sp, maxLines = 1) }
+                                )
+                            }
+                        }
+
+                        selectedOtherActivity?.let { baseline ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LiquidGlassPanel(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ComparisonMetricRow(
+                                        label = "Distance",
+                                        current = "${(activity.distanceMeters / 1000.0).format(2)} km",
+                                        other = "${(baseline.distanceMeters / 1000.0).format(2)} km",
+                                        diff = "${((activity.distanceMeters - baseline.distanceMeters) / 1000.0).format(2)} km"
+                                    )
+                                    ComparisonMetricRow(
+                                        label = "Duration",
+                                        current = "${activity.durationSeconds / 60}m ${activity.durationSeconds % 60}s",
+                                        other = "${baseline.durationSeconds / 60}m ${baseline.durationSeconds % 60}s",
+                                        diff = "${(activity.durationSeconds - baseline.durationSeconds) / 60}m"
+                                    )
+                                    ComparisonMetricRow(
+                                        label = "Pace",
+                                        current = "${(activity.avgPaceSecPerKm / 60).toInt()}'${(activity.avgPaceSecPerKm % 60).toInt()}\"/km",
+                                        other = "${(baseline.avgPaceSecPerKm / 60).toInt()}'${(baseline.avgPaceSecPerKm % 60).toInt()}\"/km",
+                                        diff = "${(activity.avgPaceSecPerKm - baseline.avgPaceSecPerKm).toInt()}s/km"
+                                    )
+                                    ComparisonMetricRow(
+                                        label = "Calories",
+                                        current = "${activity.calories} kcal",
+                                        other = "${baseline.calories} kcal",
+                                        diff = "${activity.calories - baseline.calories} kcal"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCompareDialog = false }) {
+                    Text("Done")
                 }
             }
         )
@@ -489,5 +613,24 @@ fun MetricDetailItem(label: String, value: String) {
             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+fun ComparisonMetricRow(
+    label: String,
+    current: String,
+    other: String,
+    diff: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(1f))
+        Text(current, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text(other, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(diff, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
     }
 }

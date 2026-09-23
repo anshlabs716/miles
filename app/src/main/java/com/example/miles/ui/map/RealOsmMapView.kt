@@ -89,11 +89,14 @@ import kotlin.math.tan
 
 enum class RealOsmTileSource(val title: String, val attribution: String) {
     STANDARD("OpenStreetMap", "© OpenStreetMap contributors"),
+    SATELLITE("Satellite Imagery", "© Esri World Imagery"),
+    HYBRID("Hybrid (Satellite + Roads)", "© Esri / CARTO / OSM"),
     CYCLOSM("CyclOSM Outdoor", "© CyclOSM / OpenStreetMap"),
-    HUMANITARIAN("Humanitarian OSM", "© Humanitarian OSM / HOT"),
+    OPEN_TOPO("Topographic (OpenTopo)", "© OpenTopoMap / SRTM"),
     CARTO_DARK("Carto Dark", "© CARTO / OpenStreetMap"),
     CARTO_LIGHT("Carto Voyager", "© CARTO / OpenStreetMap"),
-    OPEN_TOPO("OpenTopoMap", "© OpenTopoMap / SRTM")
+    TRANSIT("Public Transit", "© ÖPNVKarte / OSM"),
+    HUMANITARIAN("Humanitarian OSM", "© Humanitarian OSM / HOT")
 }
 
 @Composable
@@ -284,6 +287,8 @@ fun RealOsmMapView(
                     val tileUrl = when (tileSource) {
                         RealOsmTileSource.STANDARD ->
                             "https://tile.openstreetmap.org/$zoomInt/$clampedTileX/$tileY.png"
+                        RealOsmTileSource.SATELLITE, RealOsmTileSource.HYBRID ->
+                            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$zoomInt/$tileY/$clampedTileX.jpg"
                         RealOsmTileSource.CYCLOSM ->
                             "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/$zoomInt/$clampedTileX/$tileY.png"
                         RealOsmTileSource.HUMANITARIAN ->
@@ -294,6 +299,8 @@ fun RealOsmMapView(
                             "https://a.basemaps.cartocdn.com/dark_all/$zoomInt/$clampedTileX/$tileY.png"
                         RealOsmTileSource.OPEN_TOPO ->
                             "https://tile.opentopomap.org/$zoomInt/$clampedTileX/$tileY.png"
+                        RealOsmTileSource.TRANSIT ->
+                            "https://tile.memomaps.de/tilegen/$zoomInt/$clampedTileX/$tileY.png"
                     }
 
                     AsyncImage(
@@ -308,6 +315,20 @@ fun RealOsmMapView(
                             .size(with(density) { tileSizePx.toDp() })
                             .offset { IntOffset(offsetX, offsetY) }
                     )
+
+                    if (tileSource == RealOsmTileSource.HYBRID) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data("https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/$zoomInt/$clampedTileX/$tileY.png")
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier
+                                .size(with(density) { tileSizePx.toDp() })
+                                .offset { IntOffset(offsetX, offsetY) }
+                        )
+                    }
                 }
             }
 
@@ -461,14 +482,9 @@ fun RealOsmMapView(
                     // Tile Layer Switcher
                     SmallFloatingActionButton(
                         onClick = {
-                            tileSource = when (tileSource) {
-                                RealOsmTileSource.STANDARD -> RealOsmTileSource.CYCLOSM
-                                RealOsmTileSource.CYCLOSM -> RealOsmTileSource.HUMANITARIAN
-                                RealOsmTileSource.HUMANITARIAN -> RealOsmTileSource.CARTO_DARK
-                                RealOsmTileSource.CARTO_DARK -> RealOsmTileSource.CARTO_LIGHT
-                                RealOsmTileSource.CARTO_LIGHT -> RealOsmTileSource.OPEN_TOPO
-                                RealOsmTileSource.OPEN_TOPO -> RealOsmTileSource.STANDARD
-                            }
+                            val sources = RealOsmTileSource.entries
+                            val nextIndex = (tileSource.ordinal + 1) % sources.size
+                            tileSource = sources[nextIndex]
                             Toast.makeText(context, "Map layer: ${tileSource.title}", Toast.LENGTH_SHORT).show()
                         },
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,

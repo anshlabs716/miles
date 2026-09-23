@@ -47,6 +47,7 @@ import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.PrivacyZoneEntity
 import com.example.miles.data.repository.MilesRepository
 import com.example.miles.data.repository.format
+import com.example.miles.ui.journal.JournalExportDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -121,48 +122,12 @@ fun AddPrivacyZoneDialog(
 
 @Composable
 fun BackupRestoreDialog(
+    preferences: MilesPreferences,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Encrypted SQLite Backup") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "MILES stores all workouts, GNSS routes, and bio-telemetry in local SQLite. You can generate a standalone database snapshot or import prior history.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                        .padding(12.dp)
-                ) {
-                    Text(
-                        text = "Database: miles_db.sqlite\nWAL Mode: Enabled\nLocation: /data/user/0/com.aistudio.miles.track/databases",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    Toast.makeText(context, "Encrypted backup created in Downloads/MILES_Backup.sqlite", Toast.LENGTH_LONG).show()
-                    onDismiss()
-                }
-            ) {
-                Text("Export Backup")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        }
+    JournalExportDialog(
+        preferences = preferences,
+        onDismiss = onDismiss
     )
 }
 
