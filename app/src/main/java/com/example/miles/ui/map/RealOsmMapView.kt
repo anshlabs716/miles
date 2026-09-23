@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Remove
@@ -111,6 +112,8 @@ fun RealOsmMapView(
     autoCenter: Boolean = true,
     onAutoCenterChanged: ((Boolean) -> Unit)? = null,
     initialTileSource: RealOsmTileSource = RealOsmTileSource.STANDARD,
+    currentTileSource: RealOsmTileSource? = null,
+    onTileSourceChanged: ((RealOsmTileSource) -> Unit)? = null,
     onCenterChanged: ((Double, Double) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -132,7 +135,13 @@ fun RealOsmMapView(
         )
     }
     var zoomLevel by remember { mutableFloatStateOf(16f) }
-    var tileSource by remember { mutableStateOf(initialTileSource) }
+    var internalTileSource by remember { mutableStateOf(currentTileSource ?: initialTileSource) }
+    LaunchedEffect(currentTileSource) {
+        if (currentTileSource != null) {
+            internalTileSource = currentTileSource
+        }
+    }
+    val effectiveTileSource = currentTileSource ?: internalTileSource
     var isFollowingUser by remember(autoCenter) { mutableStateOf(autoCenter) }
 
     // Pulsing animation for active GPS fix
@@ -284,11 +293,13 @@ fun RealOsmMapView(
                     val offsetX = ((tileX - centerTileX) * tileSizePx + (widthPx / 2f)).roundToInt()
                     val offsetY = ((tileY - centerTileY) * tileSizePx + (heightPx / 2f)).roundToInt()
 
-                    val tileUrl = when (tileSource) {
+                    val tileUrl = when (effectiveTileSource) {
                         RealOsmTileSource.STANDARD ->
                             "https://tile.openstreetmap.org/$zoomInt/$clampedTileX/$tileY.png"
-                        RealOsmTileSource.SATELLITE, RealOsmTileSource.HYBRID ->
-                            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$zoomInt/$tileY/$clampedTileX.jpg"
+                        RealOsmTileSource.SATELLITE ->
+                            "https://mt1.google.com/vt/lyrs=s&x=$clampedTileX&y=$tileY&z=$zoomInt"
+                        RealOsmTileSource.HYBRID ->
+                            "https://mt1.google.com/vt/lyrs=y&x=$clampedTileX&y=$tileY&z=$zoomInt"
                         RealOsmTileSource.CYCLOSM ->
                             "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/$zoomInt/$clampedTileX/$tileY.png"
                         RealOsmTileSource.HUMANITARIAN ->
@@ -303,12 +314,15 @@ fun RealOsmMapView(
                             "https://tile.memomaps.de/tilegen/$zoomInt/$clampedTileX/$tileY.png"
                     }
 
+                    val requestBuilder = ImageRequest.Builder(context)
+                        .data(tileUrl)
+                        .crossfade(true)
+                    if (effectiveTileSource == RealOsmTileSource.STANDARD || effectiveTileSource == RealOsmTileSource.CYCLOSM || effectiveTileSource == RealOsmTileSource.HUMANITARIAN) {
+                        requestBuilder.addHeader("User-Agent", "MILES-Android-App/2.4 (contact: bhatiaansh716@gmail.com)")
+                    }
+
                     AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(tileUrl)
-                            .addHeader("User-Agent", "MILES-Android-App/2.4 (contact: bhatiaansh716@gmail.com)")
-                            .crossfade(true)
-                            .build(),
+                        model = requestBuilder.build(),
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier
@@ -316,7 +330,7 @@ fun RealOsmMapView(
                             .offset { IntOffset(offsetX, offsetY) }
                     )
 
-                    if (tileSource == RealOsmTileSource.HYBRID) {
+                    if (effectiveTileSource == RealOsmTileSource.HYBRID) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
                                 .data("https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/$zoomInt/$clampedTileX/$tileY.png")
@@ -479,18 +493,26 @@ fun RealOsmMapView(
                         .padding(14.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    // Tile Layer Switcher
+                    // Tile Layer Switcher: Auto-switch between Street and Satellite directly (no menu!)
                     SmallFloatingActionButton(
                         onClick = {
-                            val sources = RealOsmTileSource.entries
-                            val nextIndex = (tileSource.ordinal + 1) % sources.size
-                            tileSource = sources[nextIndex]
-                            Toast.makeText(context, "Map layer: ${tileSource.title}", Toast.LENGTH_SHORT).show()
+                            val next = if (effectiveTileSource == RealOsmTileSource.SATELLITE) {
+                                RealOsmTileSource.STANDARD
+                            } else {
+                                RealOsmTileSource.SATELLITE
+                            }
+                            internalTileSource = next
+                            onTileSourceChanged?.invoke(next)
+                            val label = if (next == RealOsmTileSource.SATELLITE) "🛰️ Satellite Map" else "🗺️ Street Map"
+                            Toast.makeText(context, label, Toast.LENGTH_SHORT).show()
                         },
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        containerColor = if (effectiveTileSource == RealOsmTileSource.SATELLITE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (effectiveTileSource == RealOsmTileSource.SATELLITE) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                     ) {
-                        Icon(Icons.Default.Layers, contentDescription = "Map Style")
+                        Icon(
+                            imageVector = if (effectiveTileSource == RealOsmTileSource.SATELLITE) Icons.Default.Map else Icons.Default.Layers,
+                            contentDescription = "Auto-Switch Map Layer"
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -590,7 +612,7 @@ fun RealOsmMapView(
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                         Text(
-                            text = "${tileSource.title} • Z${zoomLevel.roundToInt()}",
+                            text = "${effectiveTileSource.title} • Z${zoomLevel.roundToInt()}",
                             color = Color(0xFF00E5FF),
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp)
                         )
@@ -600,7 +622,7 @@ fun RealOsmMapView(
                             style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         )
                         Text(
-                            text = tileSource.attribution,
+                            text = effectiveTileSource.attribution,
                             color = Color.White.copy(alpha = 0.6f),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp)
                         )

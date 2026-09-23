@@ -39,12 +39,15 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -145,19 +148,36 @@ fun ToolsDiagnosticsScreen(
             }
         }
 
+        var lastLoc: Location? = null
+
         val locationListener = object : LocationListener {
             override fun onLocationChanged(loc: Location) {
                 hasGpsFix = true
                 gpsLat = loc.latitude
                 gpsLon = loc.longitude
                 gpsAccuracyM = loc.accuracy
-                if (loc.hasAltitude() && currentAltitudeM == 0.0) {
+                if (loc.hasAltitude()) {
                     currentAltitudeM = loc.altitude
                 }
-                if (loc.hasSpeed()) {
-                    currentSpeedMps = loc.speed
-                    if (loc.speed > maxSpeedMps) maxSpeedMps = loc.speed
+                
+                var calculatedSpeed = if (loc.hasSpeed() && loc.speed > 0f) loc.speed else 0f
+                val prev = lastLoc
+                if (prev != null && calculatedSpeed <= 0f) {
+                    val timeDeltaSec = (loc.time - prev.time) / 1000f
+                    if (timeDeltaSec in 0.2f..10f) {
+                        val distM = prev.distanceTo(loc)
+                        val s = distM / timeDeltaSec
+                        if (s in 0.1f..150f) {
+                            calculatedSpeed = s
+                        }
+                    }
                 }
+                lastLoc = loc
+                currentSpeedMps = calculatedSpeed
+                if (calculatedSpeed > maxSpeedMps) {
+                    maxSpeedMps = calculatedSpeed
+                }
+
                 if (loc.hasBearing()) {
                     currentGpsHeading = loc.bearing
                 }
@@ -170,13 +190,31 @@ fun ToolsDiagnosticsScreen(
         rotVector?.let { sm.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI) }
         pressure?.let { sm.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI) }
 
+        // Initial Last Known Location
         try {
-            lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0.5f, locationListener)
-        } catch (_: Exception) {
-            try {
-                lm?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 1f, locationListener)
-            } catch (_: Exception) {}
-        }
+            val lastGps = lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            val lastNet = lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            val best = lastGps ?: lastNet
+            best?.let {
+                hasGpsFix = true
+                gpsLat = it.latitude
+                gpsLon = it.longitude
+                gpsAccuracyM = it.accuracy
+                if (it.hasSpeed() && it.speed > 0f) {
+                    currentSpeedMps = it.speed
+                    if (it.speed > maxSpeedMps) maxSpeedMps = it.speed
+                }
+                if (it.hasAltitude()) currentAltitudeM = it.altitude
+                if (it.hasBearing()) currentGpsHeading = it.bearing
+            }
+        } catch (_: Exception) {}
+
+        try {
+            lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500L, 0f, locationListener)
+        } catch (_: Exception) {}
+        try {
+            lm?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 500L, 0f, locationListener)
+        } catch (_: Exception) {}
 
         onDispose {
             sm?.unregisterListener(sensorListener)
@@ -481,82 +519,286 @@ private fun AltimeterView(
 @Composable
 private fun SpeedometerView(
     speedMps: Float,
-    maxSpeedMps: Float
+    maxSpeedMps: Float,
+    onSimulateSpeed: ((Float) -> Unit)? = null,
+    onResetMaxSpeed: (() -> Unit)? = null
 ) {
-    val speedKmh = speedMps * 3.6f
-    val speedMph = speedKmh * 0.621371f
-    val maxKmh = maxSpeedMps * 3.6f
+    var selectedUnit by remember { mutableStateOf("KM/H") } // "KM/H", "MPH", "M/S", "KNOTS"
+    var simulatedSpeedMps by remember { mutableFloatStateOf(-1f) }
 
-    Column(
+    val effectiveSpeedMps = if (simulatedSpeedMps >= 0f) simulatedSpeedMps else speedMps
+    val effectiveMaxMps = maxOf(maxSpeedMps, effectiveSpeedMps)
+
+    val speedKmh = effectiveSpeedMps * 3.6f
+    val speedMph = speedKmh * 0.621371f
+    val speedKnots = speedKmh * 0.539957f
+
+    val displayedSpeed = when (selectedUnit) {
+        "MPH" -> speedMph
+        "M/S" -> effectiveSpeedMps
+        "KNOTS" -> speedKnots
+        else -> speedKmh
+    }
+
+    val maxGaugeSpeed = when (selectedUnit) {
+        "MPH" -> 50f
+        "M/S" -> 20f
+        "KNOTS" -> 40f
+        else -> 60f
+    }
+
+    val animatedSweep by animateFloatAsState(
+        targetValue = (displayedSpeed / maxGaugeSpeed).coerceIn(0f, 1f) * 270f,
+        animationSpec = tween(durationMillis = 400),
+        label = "SpeedGaugeSweep"
+    )
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Spacer(Modifier.height(16.dp))
-
-        Box(
-            modifier = Modifier.size(240.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val radius = size.width / 2f - 18.dp.toPx()
-
-                // Background Gauge Arc (from 135 deg to 405 deg)
-                drawArc(
-                    color = Color(0xFF2A2D33),
-                    startAngle = 135f,
-                    sweepAngle = 270f,
-                    useCenter = false,
-                    topLeft = Offset(center.x - radius, center.y - radius),
-                    size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-                    style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
-                )
-
-                // Active Speed Arc
-                val maxGaugeKmh = 60f
-                val sweep = (speedKmh / maxGaugeKmh).coerceIn(0f, 1f) * 270f
-                drawArc(
-                    brush = Brush.sweepGradient(listOf(Color(0xFF4CAF50), Color(0xFFFFB300), Color(0xFFFF5252))),
-                    startAngle = 135f,
-                    sweepAngle = sweep,
-                    useCenter = false,
-                    topLeft = Offset(center.x - radius, center.y - radius),
-                    size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-                    style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = speedKmh.format(1),
-                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                )
-                Text("km/h", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item {
+            // Unit Switcher Chips
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                listOf("KM/H", "MPH", "M/S", "KNOTS").forEach { unit ->
+                    FilterChip(
+                        selected = selectedUnit == unit,
+                        onClick = { selectedUnit = unit },
+                        label = { Text(unit, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceAround
+        item {
+            Box(
+                modifier = Modifier.size(260.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("IMPERIAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${speedMph.format(1)} mph", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val radius = size.width / 2f - 24.dp.toPx()
+
+                    // Background Gauge Arc (135 deg to 405 deg = 270 deg)
+                    drawArc(
+                        color = Color(0xFF2A2D33),
+                        startAngle = 135f,
+                        sweepAngle = 270f,
+                        useCenter = false,
+                        topLeft = Offset(center.x - radius, center.y - radius),
+                        size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+                        style = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Round)
+                    )
+
+                    // Active Speed Arc
+                    if (animatedSweep > 0f) {
+                        drawArc(
+                            brush = Brush.sweepGradient(
+                                listOf(
+                                    Color(0xFF00E676),
+                                    Color(0xFFFFEA00),
+                                    Color(0xFFFF9100),
+                                    Color(0xFFFF1744)
+                                )
+                            ),
+                            startAngle = 135f,
+                            sweepAngle = animatedSweep,
+                            useCenter = false,
+                            topLeft = Offset(center.x - radius, center.y - radius),
+                            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+                            style = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                    }
+
+                    // Ticks around gauge
+                    val numTicks = 9
+                    for (i in 0..numTicks) {
+                        val angleDeg = 135f + (i.toFloat() / numTicks) * 270f
+                        val angleRad = Math.toRadians(angleDeg.toDouble())
+                        val tickInner = radius - 16.dp.toPx()
+                        val tickOuter = radius - 8.dp.toPx()
+                        val start = Offset(
+                            center.x + tickInner * cos(angleRad).toFloat(),
+                            center.y + tickInner * sin(angleRad).toFloat()
+                        )
+                        val end = Offset(
+                            center.x + tickOuter * cos(angleRad).toFloat(),
+                            center.y + tickOuter * sin(angleRad).toFloat()
+                        )
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.4f),
+                            start = start,
+                            end = end,
+                            strokeWidth = 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+
+                    // Rotating Needle
+                    val needleAngleDeg = 135f + animatedSweep
+                    val needleAngleRad = Math.toRadians(needleAngleDeg.toDouble())
+                    val needleLength = radius - 20.dp.toPx()
+                    val needleEnd = Offset(
+                        center.x + needleLength * cos(needleAngleRad).toFloat(),
+                        center.y + needleLength * sin(needleAngleRad).toFloat()
+                    )
+                    drawLine(
+                        color = Color(0xFF00E5FF),
+                        start = center,
+                        end = needleEnd,
+                        strokeWidth = 3.5.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                    drawCircle(
+                        color = Color(0xFF00E5FF),
+                        radius = 6.dp.toPx(),
+                        center = center
+                    )
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("MAX RECORDED", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${maxKmh.format(1)} km/h", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(top = 40.dp)
+                ) {
+                    Text(
+                        text = displayedSpeed.format(1),
+                        style = MaterialTheme.typography.displayMedium.copy(
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Text(
+                        text = selectedUnit.lowercase(),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (simulatedSpeedMps >= 0f) Color(0xFF9C27B0).copy(alpha = 0.2f) else Color(0xFF00E676).copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = if (simulatedSpeedMps >= 0f) "SIMULATION ACTIVE" else "GPS HARDWARE LIVE",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (simulatedSpeedMps >= 0f) Color(0xFFE1BEE7) else Color(0xFF00E676),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("METERS / SEC", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${speedMps.format(1)} m/s", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            }
+        }
+
+        item {
+            // Speed Metrics Cards
+            LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("METRIC", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${speedKmh.format(1)} km/h", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("IMPERIAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${speedMph.format(1)} mph", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("MAX RECORDED", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val maxDisplay = when (selectedUnit) {
+                            "MPH" -> (effectiveMaxMps * 3.6f * 0.621371f).format(1) + " mph"
+                            else -> (effectiveMaxMps * 3.6f).format(1) + " km/h"
+                        }
+                        Text(maxDisplay, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                }
+            }
+        }
+
+        item {
+            // Interactive Speed Simulation & Test Suite
+            LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        "SPEEDOMETER TEST MODES",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Test gauge calibration with realistic velocity presets or lock back to live GPS:",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Button(
+                            onClick = { simulatedSpeedMps = 1.4f }, // 5 km/h
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Walk", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { simulatedSpeedMps = 3.1f }, // 11 km/h
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Jog", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { simulatedSpeedMps = 6.9f }, // 25 km/h
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Bike", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { simulatedSpeedMps = 18.0f }, // 65 km/h
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Drive", fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { simulatedSpeedMps = -1f },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Lock Real GPS", fontSize = 11.sp)
+                        }
+
+                        FilledTonalButton(
+                            onClick = { simulatedSpeedMps = 0f },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Zero (0.0)", fontSize = 11.sp)
+                        }
+                    }
                 }
             }
         }

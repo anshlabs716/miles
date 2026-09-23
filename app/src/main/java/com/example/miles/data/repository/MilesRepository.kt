@@ -82,16 +82,79 @@ class MilesRepository(
         fun parsePoints(json: String): List<GpsPoint> {
             if (json.isBlank() || json == "[]") return emptyList()
             return runCatching {
-                val array = JSONArray(json)
+                var cleanJson = json.trim()
+                if (cleanJson.startsWith("\"") && cleanJson.endsWith("\"")) {
+                    cleanJson = cleanJson.substring(1, cleanJson.length - 1).replace("\\\"", "\"")
+                }
+                val array = JSONArray(cleanJson)
                 val list = mutableListOf<GpsPoint>()
                 for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    list.add(GpsPoint(
-                        latitude = obj.getDouble("lat"), longitude = obj.getDouble("lng"),
-                        altitude = obj.optDouble("alt", 0.0), accuracy = obj.optDouble("acc", 0.0).toFloat(),
-                        speed = obj.optDouble("spd", 0.0).toFloat(), bearing = obj.optDouble("brg", 0.0).toFloat(),
-                        timestamp = obj.optLong("ts", 0L)
-                    ))
+                    val item = array.get(i)
+                    if (item is JSONObject) {
+                        val lat = when {
+                            item.has("lat") -> item.getDouble("lat")
+                            item.has("latitude") -> item.getDouble("latitude")
+                            else -> continue
+                        }
+                        val lng = when {
+                            item.has("lng") -> item.getDouble("lng")
+                            item.has("lon") -> item.getDouble("lon")
+                            item.has("longitude") -> item.getDouble("longitude")
+                            else -> continue
+                        }
+                        val alt = when {
+                            item.has("alt") -> item.optDouble("alt", 0.0)
+                            item.has("ele") -> item.optDouble("ele", 0.0)
+                            item.has("altitude") -> item.optDouble("altitude", 0.0)
+                            item.has("elevation") -> item.optDouble("elevation", 0.0)
+                            else -> 0.0
+                        }
+                        val acc = when {
+                            item.has("acc") -> item.optDouble("acc", 0.0).toFloat()
+                            item.has("accuracy") -> item.optDouble("accuracy", 0.0).toFloat()
+                            else -> 3.0f
+                        }
+                        val spd = when {
+                            item.has("spd") -> item.optDouble("spd", 0.0).toFloat()
+                            item.has("speed") -> item.optDouble("speed", 0.0).toFloat()
+                            else -> 0.0f
+                        }
+                        val brg = when {
+                            item.has("brg") -> item.optDouble("brg", 0.0).toFloat()
+                            item.has("bearing") -> item.optDouble("bearing", 0.0).toFloat()
+                            item.has("heading") -> item.optDouble("heading", 0.0).toFloat()
+                            else -> 0.0f
+                        }
+                        val ts = when {
+                            item.has("ts") -> item.optLong("ts", 0L)
+                            item.has("time") -> item.optLong("time", 0L)
+                            item.has("timestamp") -> item.optLong("timestamp", 0L)
+                            else -> 0L
+                        }
+                        list.add(GpsPoint(
+                            latitude = lat,
+                            longitude = lng,
+                            altitude = alt,
+                            accuracy = acc,
+                            speed = spd,
+                            bearing = brg,
+                            timestamp = ts
+                        ))
+                    } else if (item is JSONArray) {
+                        // GeoJSON style [lon, lat, alt?]
+                        if (item.length() >= 2) {
+                            val lon = item.getDouble(0)
+                            val lat = item.getDouble(1)
+                            val alt = if (item.length() >= 3) item.getDouble(2) else 0.0
+                            list.add(GpsPoint(
+                                latitude = lat,
+                                longitude = lon,
+                                altitude = alt,
+                                accuracy = 3.0f,
+                                timestamp = System.currentTimeMillis() + (i * 1000L)
+                            ))
+                        }
+                    }
                 }
                 list
             }.getOrDefault(emptyList())
@@ -111,16 +174,27 @@ class MilesRepository(
         fun parseWaypoints(json: String): List<Waypoint> {
             if (json.isBlank() || json == "[]") return emptyList()
             return runCatching {
-                val array = JSONArray(json)
+                var cleanJson = json.trim()
+                if (cleanJson.startsWith("\"") && cleanJson.endsWith("\"")) {
+                    cleanJson = cleanJson.substring(1, cleanJson.length - 1).replace("\\\"", "\"")
+                }
+                val array = JSONArray(cleanJson)
                 val list = mutableListOf<Waypoint>()
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
+                    val name = obj.optString("name", obj.optString("title", "Pin ${i + 1}"))
+                    val lat = obj.optDouble("lat", obj.optDouble("latitude", 0.0))
+                    val lng = obj.optDouble("lng", obj.optDouble("lon", obj.optDouble("longitude", 0.0)))
                     val typeStr = obj.optString("type", WaypointType.CUSTOM.name)
                     val type = runCatching { WaypointType.valueOf(typeStr) }.getOrDefault(WaypointType.CUSTOM)
                     list.add(Waypoint(
-                        id = obj.optString("id", UUID.randomUUID().toString()), name = obj.getString("name"),
-                        latitude = obj.getDouble("lat"), longitude = obj.getDouble("lng"), type = type,
-                        notes = obj.optString("notes", ""), timestamp = obj.optLong("ts", System.currentTimeMillis())
+                        id = obj.optString("id", UUID.randomUUID().toString()),
+                        name = name,
+                        latitude = lat,
+                        longitude = lng,
+                        type = type,
+                        notes = obj.optString("notes", ""),
+                        timestamp = obj.optLong("ts", obj.optLong("timestamp", System.currentTimeMillis()))
                     ))
                 }
                 list
@@ -602,9 +676,39 @@ class MilesRepository(
             for (i in 0 until array.length()) { insertJsonActivity(array.getJSONObject(i)); count++ }
         } else {
             val root = JSONObject(jsonStr)
-            if (root.has("activity")) { insertJsonActivity(root.getJSONObject("activity")); count++ }
-            else if (root.has("activities")) { val array = root.getJSONArray("activities"); for (i in 0 until array.length()) { insertJsonActivity(array.getJSONObject(i)); count++ } }
-            else { insertJsonActivity(root); count++ }
+            if (root.has("activity")) {
+                insertJsonActivity(root.getJSONObject("activity"))
+                count++
+            } else if (root.has("activities")) {
+                val array = root.getJSONArray("activities")
+                for (i in 0 until array.length()) { insertJsonActivity(array.getJSONObject(i)); count++ }
+            } else {
+                insertJsonActivity(root)
+                count++
+            }
+
+            // Also restore savedRoutes if this is a full MILES backup file
+            if (root.has("savedRoutes")) {
+                val routesArray = root.getJSONArray("savedRoutes")
+                for (i in 0 until routesArray.length()) {
+                    val rObj = routesArray.getJSONObject(i)
+                    val rawPts = rObj.opt("routePointsJson") ?: rObj.opt("points") ?: rObj.opt("routePoints")
+                    val pts = parsePoints(rawPts?.toString() ?: "[]")
+                    val wpPts = parseWaypoints(rObj.optString("waypointsJson", "[]"))
+                    val route = SavedRouteEntity(
+                        id = rObj.optString("id", UUID.randomUUID().toString()),
+                        name = rObj.optString("name", rObj.optString("title", "Imported Route")),
+                        title = rObj.optString("title", rObj.optString("name", "Imported Route")),
+                        activityType = rObj.optString("activityType", ActivityType.WALKING.name),
+                        distanceMeters = rObj.optDouble("distanceMeters", 0.0),
+                        elevationGainM = rObj.optDouble("elevationGainM", 0.0),
+                        routePointsJson = pointsToJson(pts),
+                        waypointsJson = waypointsToJson(wpPts),
+                        createdAt = rObj.optLong("createdAt", System.currentTimeMillis())
+                    )
+                    routeDao.insertRoute(route)
+                }
+            }
         }
         return count
     }
@@ -616,17 +720,50 @@ class MilesRepository(
         val startTime = obj.optLong("startTime", now - 3600000L)
         val endTime = obj.optLong("endTime", startTime + 1800000L)
         val duration = obj.optLong("durationSeconds", (endTime - startTime) / 1000)
-        val distance = obj.optDouble("distanceMeters", obj.optDouble("distanceKm", 0.0) * 1000.0)
+        var distance = obj.optDouble("distanceMeters", obj.optDouble("distanceKm", 0.0) * 1000.0)
+
+        // Robust point parsing supporting any key: routePointsJson, points, routePoints, track, coordinates
+        val rawPoints = obj.opt("routePointsJson") ?: obj.opt("points") ?: obj.opt("routePoints") ?: obj.opt("track") ?: obj.opt("coordinates")
+        val pointsList = if (rawPoints != null) parsePoints(rawPoints.toString()) else emptyList()
+        val routePointsJson = pointsToJson(pointsList)
+
+        // If distance was 0, compute from GPS track points
+        if (distance <= 0.0 && pointsList.size >= 2) {
+            var sumDist = 0.0
+            for (i in 0 until pointsList.size - 1) {
+                sumDist += calculateDistanceMeters(
+                    pointsList[i].latitude, pointsList[i].longitude,
+                    pointsList[i + 1].latitude, pointsList[i + 1].longitude
+                )
+            }
+            distance = sumDist
+        }
+
+        val rawWaypoints = obj.opt("waypointsJson") ?: obj.opt("waypoints")
+        val waypointsList = if (rawWaypoints != null) parseWaypoints(rawWaypoints.toString()) else emptyList()
+        val waypointsJson = waypointsToJson(waypointsList)
+
         val steps = obj.optInt("steps", (distance * 1.3).toInt())
-        val calories = obj.optInt("calories", 0)
+        val calories = obj.optInt("calories", (distance / 1000.0 * 65.0).toInt())
         val hr = obj.optInt("avgHeartRate", 0)
+
         val entity = ActivityEntity(
-            id = UUID.randomUUID().toString(), title = title, activityType = type,
-            startTime = startTime, endTime = endTime, durationSeconds = duration, distanceMeters = distance, steps = steps,
+            id = obj.optString("id", UUID.randomUUID().toString()),
+            title = title,
+            activityType = type,
+            startTime = startTime,
+            endTime = endTime,
+            durationSeconds = duration,
+            distanceMeters = distance,
+            steps = steps,
             avgPaceSecPerKm = if (distance > 0) duration / (distance / 1000.0) else 0.0,
             avgSpeedKmh = if (duration > 0) (distance / 1000.0) / (duration / 3600.0) else 0.0,
-            elevationGainM = obj.optDouble("elevationGainM", 0.0), calories = calories, avgHeartRate = hr,
-            routePointsJson = obj.optJSONArray("points")?.toString() ?: "[]", waypointsJson = "[]", notes = obj.optString("notes", "Imported from file")
+            elevationGainM = obj.optDouble("elevationGainM", 0.0),
+            calories = calories,
+            avgHeartRate = hr,
+            routePointsJson = routePointsJson,
+            waypointsJson = waypointsJson,
+            notes = obj.optString("notes", "Imported from file")
         )
         activityDao.insertActivity(entity)
     }

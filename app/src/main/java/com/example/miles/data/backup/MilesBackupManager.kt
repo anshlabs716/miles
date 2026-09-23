@@ -142,16 +142,57 @@ class MilesBackupManager(
         put("isFavorite", a.isFavorite); put("isDeleted", a.isDeleted); put("deletedAt", a.deletedAt); put("version", a.version); put("sensorSource", a.sensorSource)
     }
 
-    private fun activityFromJson(o: JSONObject) = ActivityEntity(
-        id = o.getString("id"), title = o.getString("title"), activityType = o.optString("activityType", "WALKING"),
-        startTime = o.getLong("startTime"), endTime = o.getLong("endTime"), durationSeconds = o.getLong("durationSeconds"),
-        distanceMeters = o.getDouble("distanceMeters"), steps = o.optInt("steps"), avgPaceSecPerKm = o.optDouble("avgPaceSecPerKm"), bestPaceSecPerKm = o.optDouble("bestPaceSecPerKm"),
-        avgSpeedKmh = o.optDouble("avgSpeedKmh"), maxSpeedKmh = o.optDouble("maxSpeedKmh"), elevationGainM = o.optDouble("elevationGainM"), elevationLossM = o.optDouble("elevationLossM"),
-        calories = o.optInt("calories"), avgHeartRate = o.optInt("avgHeartRate"), maxHeartRate = o.optInt("maxHeartRate"), routePointsJson = o.optString("routePointsJson", "[]"),
-        waypointsJson = o.optString("waypointsJson", "[]"), weatherJson = o.optString("weatherJson", ""), notes = o.optString("notes", ""),
-        photoUri = if (o.isNull("photoUri")) null else o.optString("photoUri"), isFavorite = o.optBoolean("isFavorite"), isDeleted = o.optBoolean("isDeleted"),
-        deletedAt = if (o.isNull("deletedAt")) null else o.optLong("deletedAt"), version = o.optInt("version", 1), sensorSource = o.optString("sensorSource", "Built-in GPS")
-    )
+    private fun activityFromJson(o: JSONObject): ActivityEntity {
+        val rawPoints = o.opt("routePointsJson") ?: o.opt("points") ?: o.opt("routePoints") ?: o.opt("track") ?: o.opt("coordinates")
+        val pointsList = if (rawPoints != null) MilesRepository.parsePoints(rawPoints.toString()) else emptyList()
+        val normalizedPointsJson = MilesRepository.pointsToJson(pointsList)
+
+        val rawWaypoints = o.opt("waypointsJson") ?: o.opt("waypoints")
+        val waypointsList = if (rawWaypoints != null) MilesRepository.parseWaypoints(rawWaypoints.toString()) else emptyList()
+        val normalizedWaypointsJson = MilesRepository.waypointsToJson(waypointsList)
+
+        var distance = o.optDouble("distanceMeters", o.optDouble("distanceKm", 0.0) * 1000.0)
+        if (distance <= 0.0 && pointsList.size >= 2) {
+            var sumDist = 0.0
+            for (i in 0 until pointsList.size - 1) {
+                sumDist += distanceMeters(
+                    pointsList[i].latitude, pointsList[i].longitude,
+                    pointsList[i + 1].latitude, pointsList[i + 1].longitude
+                )
+            }
+            distance = sumDist
+        }
+
+        return ActivityEntity(
+            id = o.optString("id", java.util.UUID.randomUUID().toString()),
+            title = o.optString("title", "Workout"),
+            activityType = o.optString("activityType", "WALKING"),
+            startTime = o.optLong("startTime", System.currentTimeMillis()),
+            endTime = o.optLong("endTime", System.currentTimeMillis()),
+            durationSeconds = o.optLong("durationSeconds", 0L),
+            distanceMeters = distance,
+            steps = o.optInt("steps", (distance * 1.3).toInt()),
+            avgPaceSecPerKm = o.optDouble("avgPaceSecPerKm", 0.0),
+            bestPaceSecPerKm = o.optDouble("bestPaceSecPerKm", 0.0),
+            avgSpeedKmh = o.optDouble("avgSpeedKmh", 0.0),
+            maxSpeedKmh = o.optDouble("maxSpeedKmh", 0.0),
+            elevationGainM = o.optDouble("elevationGainM", 0.0),
+            elevationLossM = o.optDouble("elevationLossM", 0.0),
+            calories = o.optInt("calories", (distance / 1000.0 * 65.0).toInt()),
+            avgHeartRate = o.optInt("avgHeartRate", 0),
+            maxHeartRate = o.optInt("maxHeartRate", 0),
+            routePointsJson = normalizedPointsJson,
+            waypointsJson = normalizedWaypointsJson,
+            weatherJson = o.optString("weatherJson", ""),
+            notes = o.optString("notes", ""),
+            photoUri = if (o.isNull("photoUri")) null else o.optString("photoUri"),
+            isFavorite = o.optBoolean("isFavorite", false),
+            isDeleted = o.optBoolean("isDeleted", false),
+            deletedAt = if (o.isNull("deletedAt")) null else o.optLong("deletedAt"),
+            version = o.optInt("version", 1),
+            sensorSource = o.optString("sensorSource", "Built-in GPS")
+        )
+    }
 
     private fun routeToJson(r: SavedRouteEntity) = JSONObject().apply {
         put("id", r.id); put("title", r.title); put("name", r.name); put("description", r.description); put("activityType", r.activityType)
@@ -159,11 +200,41 @@ class MilesBackupManager(
         put("isFavorite", r.isFavorite); put("createdAt", r.createdAt)
     }
 
-    private fun routeFromJson(o: JSONObject) = SavedRouteEntity(
-        id = o.getString("id"), title = o.optString("title"), name = o.optString("name", o.optString("title")), description = o.optString("description"),
-        activityType = o.optString("activityType", "WALKING"), distanceMeters = o.optDouble("distanceMeters"), elevationGainM = o.optDouble("elevationGainM"),
-        routePointsJson = o.optString("routePointsJson", "[]"), waypointsJson = o.optString("waypointsJson", "[]"), isFavorite = o.optBoolean("isFavorite"), createdAt = o.optLong("createdAt")
-    )
+    private fun routeFromJson(o: JSONObject): SavedRouteEntity {
+        val rawPoints = o.opt("routePointsJson") ?: o.opt("points") ?: o.opt("routePoints")
+        val pointsList = if (rawPoints != null) MilesRepository.parsePoints(rawPoints.toString()) else emptyList()
+        val normalizedPointsJson = MilesRepository.pointsToJson(pointsList)
+
+        val rawWaypoints = o.opt("waypointsJson") ?: o.opt("waypoints")
+        val waypointsList = if (rawWaypoints != null) MilesRepository.parseWaypoints(rawWaypoints.toString()) else emptyList()
+        val normalizedWaypointsJson = MilesRepository.waypointsToJson(waypointsList)
+
+        var distance = o.optDouble("distanceMeters", 0.0)
+        if (distance <= 0.0 && pointsList.size >= 2) {
+            var sumDist = 0.0
+            for (i in 0 until pointsList.size - 1) {
+                sumDist += distanceMeters(
+                    pointsList[i].latitude, pointsList[i].longitude,
+                    pointsList[i + 1].latitude, pointsList[i + 1].longitude
+                )
+            }
+            distance = sumDist
+        }
+
+        return SavedRouteEntity(
+            id = o.optString("id", java.util.UUID.randomUUID().toString()),
+            title = o.optString("title", o.optString("name", "Saved Route")),
+            name = o.optString("name", o.optString("title", "Saved Route")),
+            description = o.optString("description", ""),
+            activityType = o.optString("activityType", "WALKING"),
+            distanceMeters = distance,
+            elevationGainM = o.optDouble("elevationGainM", 0.0),
+            routePointsJson = normalizedPointsJson,
+            waypointsJson = normalizedWaypointsJson,
+            isFavorite = o.optBoolean("isFavorite", false),
+            createdAt = o.optLong("createdAt", System.currentTimeMillis())
+        )
+    }
 
     private fun zoneToJson(z: PrivacyZoneEntity) = JSONObject().apply {
         put("id", z.id); put("name", z.name); put("latitude", z.latitude); put("longitude", z.longitude); put("radiusMeters", z.radiusMeters); put("isEnabled", z.isEnabled)
