@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryStd
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MusicNote
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.Thunderstorm
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
@@ -103,6 +106,8 @@ import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
 import com.example.miles.engine.TrackingState
+import com.example.miles.engine.WeatherFetcher
+import com.example.miles.engine.WeatherInfo
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
 import com.example.miles.wear.WearCompanionManager
@@ -112,6 +117,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun DashboardScreen(
@@ -150,6 +156,21 @@ fun DashboardScreen(
     }
     val isCharging = remember {
         batteryManager?.isCharging == true
+    }
+
+    // Real weather for your location (Open-Meteo — free, no API key)
+    var weather by remember { mutableStateOf<WeatherInfo?>(null) }
+    LaunchedEffect(Unit) {
+        weather = WeatherFetcher.fetch(context)
+    }
+    val weatherCond = weather?.condition.orEmpty()
+    val weatherIcon = when {
+        weatherCond.contains("Thunder") -> Icons.Default.Thunderstorm
+        weatherCond.contains("Snow") -> Icons.Default.AcUnit
+        weatherCond.contains("Fog") -> Icons.Default.Cloud
+        weatherCond.contains("Rain") || weatherCond.contains("Drizzle") || weatherCond.contains("Shower") -> Icons.Default.Grain
+        weatherCond.contains("Clear") -> Icons.Default.WbSunny
+        else -> Icons.Default.Cloud
     }
 
     // Dashboard Customization Local State
@@ -253,8 +274,15 @@ fun DashboardScreen(
                 // Weather Chip
                 item {
                     StatusChip(
-                        icon = Icons.Default.WbSunny,
-                        label = "21°C Clear",
+                        icon = weatherIcon,
+                        label = weather
+                            ?.let { wt ->
+                                listOfNotNull(
+                                    wt.temperatureC?.let { "${it.roundToInt()}°C" },
+                                    wt.condition
+                                ).joinToString(" ")
+                            }
+                            ?: "Weather --",
                         tint = Color(0xFFFFB300),
                         onClick = { cardWeather = !cardWeather }
                     )
@@ -408,11 +436,21 @@ fun DashboardScreen(
                     Column(Modifier.padding(16.dp)) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.WbSunny, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(24.dp))
+                                Icon(weatherIcon, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(24.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Column {
                                     Text("LOCAL WEATHER & CONDITIONS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-                                    Text("21°C • Partly Cloudy (Optimal Outdoor)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                                    Text(
+                                        weather
+                                            ?.let { wt ->
+                                                listOfNotNull(
+                                                    wt.temperatureC?.let { "${it.roundToInt()}°C" },
+                                                    wt.condition
+                                                ).joinToString(" • ")
+                                            }
+                                            ?: "Weather unavailable — enable location & check connection",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                    )
                                 }
                             }
                         }
@@ -420,19 +458,35 @@ fun DashboardScreen(
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                             Column {
                                 Text("WIND", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("12 km/h NW", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                                Text(
+                                    weather?.let { wt ->
+                                        listOfNotNull(
+                                            wt.windSpeedKmh?.let { "${it.roundToInt()} km/h" },
+                                            wt.windDirection
+                                        ).joinToString(" ")
+                                    } ?: "--",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
                             }
                             Column {
                                 Text("HUMIDITY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("54%", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                                Text(weather?.humidityPct?.let { "$it%" } ?: "--", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                             }
                             Column {
                                 Text("UV INDEX", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("3 (Moderate)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                                Text(
+                                    weather?.let { wt ->
+                                        listOfNotNull(
+                                            wt.uvIndex?.let { "${it.roundToInt()}" },
+                                            wt.uvCategory
+                                        ).joinToString(" ")
+                                    } ?: "--",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
                             }
                             Column {
                                 Text("SUNSET", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("19:24", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                                Text(weather?.sunset ?: "--", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                             }
                         }
                     }

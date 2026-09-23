@@ -114,7 +114,8 @@ fun RealOsmMapView(
     initialTileSource: RealOsmTileSource = RealOsmTileSource.STANDARD,
     currentTileSource: RealOsmTileSource? = null,
     onTileSourceChanged: ((RealOsmTileSource) -> Unit)? = null,
-    onCenterChanged: ((Double, Double) -> Unit)? = null
+    onCenterChanged: ((Double, Double) -> Unit)? = null,
+    recenterRequest: Int = 0
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -232,6 +233,20 @@ fun RealOsmMapView(
             centerLat = effectiveUserLocation.latitude
             centerLon = effectiveUserLocation.longitude
             onCenterChanged?.invoke(centerLat, centerLon)
+        }
+    }
+
+    // External "My Location" request (e.g. toolbar button) → center on real GPS
+    LaunchedEffect(recenterRequest) {
+        if (recenterRequest > 0) {
+            isFollowingUser = true
+            onAutoCenterChanged?.invoke(true)
+            querySystemLocation()
+            effectiveUserLocation?.let { loc ->
+                centerLat = loc.latitude
+                centerLon = loc.longitude
+                onCenterChanged?.invoke(centerLat, centerLon)
+            }
         }
     }
 

@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,30 +34,30 @@ import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudDownload
+
+
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBike
-import androidx.compose.material.icons.filled.Download
+
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.LocalGasStation
-import androidx.compose.material.icons.filled.LocalHospital
+
+
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.PinDrop
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Restaurant
+
+
 import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.Search
+
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.Train
+
 import androidx.compose.material.icons.filled.TurnLeft
 import androidx.compose.material.icons.filled.TurnRight
 import androidx.compose.material.icons.filled.ViewInAr
@@ -72,7 +72,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -86,7 +86,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableFloatStateOf
+
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -112,7 +112,7 @@ import com.example.miles.ui.map.RealOsmMapView
 import com.example.miles.ui.map.RealOsmTileSource
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
-import kotlinx.coroutines.delay
+
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -122,25 +122,6 @@ data class SavedPlaceItem(
     val lat: Double,
     val lon: Double,
     val icon: ImageVector
-)
-
-data class OfflineRegion(
-    val name: String,
-    val sizeMb: Double,
-    val tileCount: Int,
-    val lat: Double = 37.7749,
-    val lon: Double = -122.4194,
-    val isDownloaded: Boolean = true
-)
-
-data class OfflineCity(
-    val name: String,
-    val country: String,
-    val lat: Double,
-    val lon: Double,
-    val sizeMb: Double,
-    val tileCount: Int,
-    val flag: String
 )
 
 @Composable
@@ -157,10 +138,9 @@ fun RouteBuilderScreen(
 
     // Map & Layer State (Auto-switches directly without menu)
     var selectedTileSource by remember { mutableStateOf(RealOsmTileSource.STANDARD) }
-    var showOfflineDialog by remember { mutableStateOf(false) }
     var showPlacesDialog by remember { mutableStateOf(false) }
     var is3dMode by remember { mutableStateOf(false) }
-    var citySearchQuery by remember { mutableStateOf("") }
+    var recenterRequest by remember { mutableIntStateOf(0) }
 
     // Builder Points & Waypoints
     var builderPoints by remember { mutableStateOf<List<GpsPoint>>(emptyList()) }
@@ -172,10 +152,6 @@ fun RouteBuilderScreen(
     // Center Coordinate State
     var centerLat by remember { mutableDoubleStateOf(37.7749) }
     var centerLon by remember { mutableDoubleStateOf(-122.4194) }
-
-    // Search & POI State
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedPoiCategory by remember { mutableStateOf("All") }
 
     // Live Turn-by-Turn Navigation State
     var isNavigatingLive by remember { mutableStateOf(false) }
@@ -192,16 +168,6 @@ fun RouteBuilderScreen(
             SavedPlaceItem("Twin Peaks Lookout", "FAVORITE", 37.7544, -122.4477, Icons.Default.Explore)
         )
     }
-
-    // Offline Regions
-    val offlineRegions = remember {
-        mutableStateListOf(
-            OfflineRegion("San Francisco Metro", 34.2, 1420),
-            OfflineRegion("Mount Tamalpais Trails", 18.5, 680)
-        )
-    }
-    var isDownloadingRegion by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableFloatStateOf(0f) }
 
     // Calculate total builder distance
     val totalDistanceMeters = remember(builderPoints) {
@@ -237,7 +203,7 @@ fun RouteBuilderScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "OpenStreetMap • Satellite • Offline regions • Turn-by-turn",
+                        text = "OpenStreetMap • Satellite • Turn-by-turn",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -282,74 +248,12 @@ fun RouteBuilderScreen(
                     initialTileSource = selectedTileSource,
                     currentTileSource = selectedTileSource,
                     onTileSourceChanged = { selectedTileSource = it },
+                    recenterRequest = recenterRequest,
                     onCenterChanged = { lat, lng ->
                         centerLat = lat
                         centerLon = lng
                     }
                 )
-
-                // Top Controls Overlay: Search Bar & POI Filter Chips
-                if (!isNavigatingLive) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                            shadowElevation = 6.dp,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                OutlinedTextField(
-                                    value = searchQuery,
-                                    onValueChange = { searchQuery = it },
-                                    placeholder = { Text("Search places, trails, addresses...", fontSize = 13.sp) },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Category POI Quick Chips
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            val categories = listOf(
-                                Triple("All", Icons.Default.Place, "All"),
-                                Triple("Food", Icons.Default.Restaurant, "Food"),
-                                Triple("Parks", Icons.Default.Park, "Parks"),
-                                Triple("Fuel", Icons.Default.LocalGasStation, "Fuel"),
-                                Triple("Transit", Icons.Default.Train, "Transit"),
-                                Triple("Health", Icons.Default.LocalHospital, "Health")
-                            )
-                            items(categories) { (cat, icon, label) ->
-                                FilterChip(
-                                    selected = selectedPoiCategory == cat,
-                                    onClick = {
-                                        selectedPoiCategory = cat
-                                        Toast.makeText(context, "Filtered POIs for $label", Toast.LENGTH_SHORT).show()
-                                    },
-                                    leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                                    label = { Text(label, fontSize = 11.sp) }
-                                )
-                            }
-                        }
-                    }
-                }
 
                 // Map Utility Floating Action Buttons (Unified Right Toolbar - No Overlapping)
                 if (!isNavigatingLive) {
@@ -382,17 +286,7 @@ fun RouteBuilderScreen(
                             )
                         }
 
-                        // 2. Offline Maps: Select a City
-                        FloatingActionButton(
-                            onClick = { showOfflineDialog = true },
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = "Offline City Maps", modifier = Modifier.size(20.dp))
-                        }
-
-                        // 3. Saved Places & Pins
+                        // 2. Saved Places & Pins
                         FloatingActionButton(
                             onClick = { showPlacesDialog = true },
                             containerColor = MaterialTheme.colorScheme.surface,
@@ -402,12 +296,11 @@ fun RouteBuilderScreen(
                             Icon(Icons.Default.PinDrop, contentDescription = "Saved Places", modifier = Modifier.size(20.dp))
                         }
 
-                        // 4. Center on GPS Location
+                        // 3. Center on real GPS location
                         FloatingActionButton(
                             onClick = {
-                                centerLat = 37.7749
-                                centerLon = -122.4194
-                                Toast.makeText(context, "Centered on GPS location", Toast.LENGTH_SHORT).show()
+                                recenterRequest += 1
+                                Toast.makeText(context, "Centering on GPS location...", Toast.LENGTH_SHORT).show()
                             },
                             containerColor = MaterialTheme.colorScheme.surface,
                             contentColor = MaterialTheme.colorScheme.primary,
@@ -783,223 +676,6 @@ fun RouteBuilderScreen(
                 }
             }
         }
-    }
-
-    // OFFLINE MAPS DOWNLOADER MODAL (Select a City)
-    if (showOfflineDialog) {
-        val availableCities = remember {
-            listOf(
-                OfflineCity("New York City", "United States 🇺🇸", 40.7128, -74.0060, 24.5, 1120, "🗽"),
-                OfflineCity("Paris", "France 🇫🇷", 48.8566, 2.3522, 22.0, 1050, "🗼"),
-                OfflineCity("London", "United Kingdom 🇬🇧", 51.5074, -0.1278, 26.2, 1280, "🎡"),
-                OfflineCity("San Francisco", "United States 🇺🇸", 37.7749, -122.4194, 18.5, 890, "🌉"),
-                OfflineCity("Tokyo", "Japan 🇯🇵", 35.6762, 139.6503, 31.8, 1540, "⛩️"),
-                OfflineCity("Rome", "Italy 🇮🇹", 41.9028, 12.4964, 20.4, 980, "🏛️"),
-                OfflineCity("Berlin", "Germany 🇩🇪", 52.5200, 13.4050, 21.0, 1020, "🏙️"),
-                OfflineCity("Sydney", "Australia 🇦🇺", -33.8688, 151.2093, 23.1, 1100, "🦘"),
-                OfflineCity("Toronto", "Canada 🇨🇦", 43.6532, -79.3832, 19.3, 920, "🍁"),
-                OfflineCity("Dubai", "United Arab Emirates 🇦🇪", 25.2048, 55.2708, 17.8, 870, "🕌"),
-                OfflineCity("Barcelona", "Spain 🇪🇸", 41.3851, 2.1734, 19.5, 940, "🏖️"),
-                OfflineCity("Denver", "United States 🇺🇸", 39.7392, -104.9903, 22.4, 1040, "🏔️"),
-                OfflineCity("Mumbai", "India 🇮🇳", 19.0760, 72.8777, 25.0, 1200, "🇮🇳"),
-                OfflineCity("Singapore", "Singapore 🇸🇬", 1.3521, 103.8198, 16.2, 780, "🦁"),
-                OfflineCity("Los Angeles", "United States 🇺🇸", 34.0522, -118.2437, 27.6, 1350, "☀️"),
-                OfflineCity("Zurich", "Switzerland 🇨🇭", 47.3769, 8.5417, 17.0, 820, "⛷️")
-            )
-        }
-
-        var downloadingCity by remember { mutableStateOf<String?>(null) }
-
-        val filteredCities = remember(citySearchQuery, availableCities) {
-            if (citySearchQuery.isBlank()) availableCities
-            else availableCities.filter {
-                it.name.contains(citySearchQuery, ignoreCase = true) ||
-                it.country.contains(citySearchQuery, ignoreCase = true)
-            }
-        }
-
-        AlertDialog(
-            onDismissRequest = { showOfflineDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Select a City to Download", fontWeight = FontWeight.Bold)
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        "Download complete offline map tiles by city for zero-data GPS tracking and trail routing.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // City Search Bar
-                    OutlinedTextField(
-                        value = citySearchQuery,
-                        onValueChange = { citySearchQuery = it },
-                        placeholder = { Text("Search city (e.g., Paris, Tokyo, London)...", fontSize = 12.sp) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        trailingIcon = {
-                            if (citySearchQuery.isNotEmpty()) {
-                                IconButton(onClick = { citySearchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-
-                    // Cities List
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(280.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(filteredCities) { city ->
-                            val isDownloaded = offlineRegions.any { it.name.startsWith(city.name) }
-                            val isCurrentlyDownloading = downloadingCity == city.name
-
-                            LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                            Text(city.flag, fontSize = 22.sp)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Column {
-                                                Text(city.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                Text(
-                                                    "${city.country} • ~${city.sizeMb} MB • ${city.tileCount} tiles",
-                                                    fontSize = 11.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-
-                                        if (isDownloaded) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                FilledTonalButton(
-                                                    onClick = {
-                                                        centerLat = city.lat
-                                                        centerLon = city.lon
-                                                        showOfflineDialog = false
-                                                        Toast.makeText(context, "Centered map on ${city.name}", Toast.LENGTH_SHORT).show()
-                                                    },
-                                                    shape = RoundedCornerShape(8.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Place, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Go To", fontSize = 11.sp)
-                                                }
-                                            }
-                                        } else if (isCurrentlyDownloading) {
-                                            Text("Downloading...", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                                        } else {
-                                            Button(
-                                                onClick = {
-                                                    downloadingCity = city.name
-                                                    scope.launch {
-                                                        for (p in 1..10) {
-                                                            downloadProgress = p / 10f
-                                                            delay(200)
-                                                        }
-                                                        downloadingCity = null
-                                                        offlineRegions.add(
-                                                            OfflineRegion(
-                                                                name = "${city.name} (${city.country})",
-                                                                sizeMb = city.sizeMb,
-                                                                tileCount = city.tileCount,
-                                                                lat = city.lat,
-                                                                lon = city.lon
-                                                            )
-                                                        )
-                                                        Toast.makeText(context, "Downloaded offline map for ${city.name}!", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                },
-                                                shape = RoundedCornerShape(8.dp)
-                                            ) {
-                                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Download", fontSize = 11.sp)
-                                            }
-                                        }
-                                    }
-
-                                    if (isCurrentlyDownloading) {
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        LinearProgressIndicator(
-                                            progress = { downloadProgress },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        Text(
-                                            "Downloading tiles: ${(downloadProgress * 100).toInt()}%",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Downloaded Cities Section
-                    if (offlineRegions.isNotEmpty()) {
-                        Text(
-                            "DOWNLOADED OFFLINE CITIES (${offlineRegions.size})",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            offlineRegions.forEach { region ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable {
-                                                centerLat = region.lat
-                                                centerLon = region.lon
-                                                showOfflineDialog = false
-                                                Toast.makeText(context, "Jumped to ${region.name}", Toast.LENGTH_SHORT).show()
-                                            }
-                                    ) {
-                                        Text(region.name, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                                        Text("${region.sizeMb} MB • ${region.tileCount} tiles", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-
-                                    IconButton(
-                                        onClick = { offlineRegions.remove(region) },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showOfflineDialog = false }) { Text("Done") }
-            }
-        )
     }
 
     // 3. SAVED PLACES & PINS MODAL
