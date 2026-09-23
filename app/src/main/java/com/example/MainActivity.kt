@@ -73,6 +73,7 @@ import com.example.miles.ui.journal.JournalScreen
 import com.example.miles.ui.routes.RouteBuilderScreen
 import com.example.miles.ui.settings.SettingsScreen
 import com.example.miles.ui.setup.OnboardingSetupScreen
+import com.example.miles.ui.setup.PermissionPromptScreen
 import com.example.miles.ui.studio.DistanceCalculatorScreen
 import com.example.miles.ui.studio.MilesStudioScreen
 import com.example.miles.ui.theme.MilesTheme
@@ -174,17 +175,19 @@ class MainActivity : ComponentActivity() {
                     preferences.markHealthConnectFirstBootHandled()
                 }
             }
-
-            LaunchedEffect(Unit) {
-                repository.purgePreloadedSeedData()
-                val requiredPermissions = buildList {
+            val requiredPermissions = remember {
+                buildList {
                     add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) add(Manifest.permission.ACTIVITY_RECOGNITION)
                     add(Manifest.permission.BODY_SENSORS)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT) }
                 }.toTypedArray()
-                allPermissionsLauncher.launch(requiredPermissions)
+            }
+            val permissionPromptVisible = !userPrefs.permissionPromptShown
+
+            LaunchedEffect(Unit) {
+                repository.purgePreloadedSeedData()
             }
 
             LaunchedEffect(userPrefs.hasCompletedSetup, userPrefs.stepSensorHardwareEnabled) {
@@ -233,7 +236,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (showBatteryOptDialog) {
+                if (showBatteryOptDialog && !permissionPromptVisible) {
                     AlertDialog(
                         onDismissRequest = { showBatteryOptDialog = false },
                         icon = { Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -244,7 +247,18 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (!userPrefs.hasCompletedSetup || subScreen == MilesSubScreen.SETUP) {
+                if (permissionPromptVisible) {
+                    PermissionPromptScreen(
+                        onAllow = {
+                            preferences.markPermissionPromptShown()
+                            allPermissionsLauncher.launch(requiredPermissions)
+                        },
+                        onDeny = {
+                            preferences.markPermissionPromptShown()
+                            preferences.markHealthConnectFirstBootHandled()
+                        }
+                    )
+                } else if (!userPrefs.hasCompletedSetup || subScreen == MilesSubScreen.SETUP) {
                     OnboardingSetupScreen(preferences = preferences, onSetupComplete = { subScreen = MilesSubScreen.NONE })
                 } else {
                     val configuration = LocalConfiguration.current

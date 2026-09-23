@@ -79,6 +79,7 @@ data class AccessibilitySettings(
 data class UserPreferences(
     val hasCompletedSetup: Boolean = false,
     val healthConnectFirstBootHandled: Boolean = false,
+    val permissionPromptShown: Boolean = false,
     val userName: String = "",
     val primarySport: String = "RUNNING",
     val dailyStepGoal: Int = 8000,
@@ -206,6 +207,7 @@ class MilesPreferences(context: Context) {
     private fun loadPreferences(): UserPreferences {
         val hasSetup = prefs.getBoolean("has_completed_setup", false)
         val healthConnectFirstBootHandled = prefs.getBoolean("health_connect_first_boot_handled", false)
+        val permissionPromptShown = prefs.getBoolean("permission_prompt_shown", false)
         val userName = prefs.getString("user_name", "") ?: ""
         val primarySport = prefs.getString("primary_sport", "RUNNING") ?: "RUNNING"
         val stepGoal = prefs.getInt("daily_step_goal", 8000)
@@ -239,6 +241,7 @@ class MilesPreferences(context: Context) {
         return UserPreferences(
             hasCompletedSetup = hasSetup,
             healthConnectFirstBootHandled = healthConnectFirstBootHandled,
+            permissionPromptShown = permissionPromptShown,
             userName = userName,
             primarySport = primarySport,
             dailyStepGoal = stepGoal,
@@ -408,6 +411,11 @@ class MilesPreferences(context: Context) {
     fun markHealthConnectFirstBootHandled() {
         prefs.edit().putBoolean("health_connect_first_boot_handled", true).apply()
         _userPreferences.value = _userPreferences.value.copy(healthConnectFirstBootHandled = true)
+    }
+
+    fun markPermissionPromptShown() {
+        prefs.edit().putBoolean("permission_prompt_shown", true).apply()
+        _userPreferences.value = _userPreferences.value.copy(permissionPromptShown = true)
     }
 
     fun setTheme(theme: BaseThemeOption) {
