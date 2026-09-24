@@ -109,8 +109,6 @@ import com.example.miles.data.model.Waypoint
 import com.example.miles.data.model.WaypointType
 import com.example.miles.data.repository.MilesRepository
 import com.example.miles.data.repository.format
-import com.example.miles.engine.OsmRouteStep
-import com.example.miles.engine.RoutingEngine
 import com.example.miles.ui.map.RealOsmMapView
 import com.example.miles.ui.map.RealOsmTileSource
 import com.example.miles.ui.theme.LiquidGlassCard
@@ -130,8 +128,7 @@ data class SavedPlaceItem(
 @Composable
 fun RouteBuilderScreen(
     repository: MilesRepository,
-    onStartNavigation: ((SavedRouteEntity) -> Unit)? = null,
-    onUpdateNavigationSteps: ((List<OsmRouteStep>) -> Unit)? = null
+    onStartNavigation: ((SavedRouteEntity) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -163,11 +160,6 @@ fun RouteBuilderScreen(
     var activeNavRouteName by remember { mutableStateOf("Custom Planned Route") }
     var navStepIndex by remember { mutableIntStateOf(0) }
     var voiceMuted by remember { mutableStateOf(false) }
-
-    // Real route computation state (OSRM)
-    var isRouteLoading by remember { mutableStateOf(false) }
-    var navRouteSteps by remember { mutableStateOf<List<OsmRouteStep>>(emptyList()) }
-    var navEtaMinutes by remember { mutableIntStateOf(0) }
 
     // Saved Places list
     val savedPlaces = remember {
@@ -344,13 +336,6 @@ fun RouteBuilderScreen(
 
                 // LIVE TURN-BY-TURN NAVIGATION HUD BANNER (When Navigation Active)
                 if (isNavigatingLive) {
-                    val currentStep = navRouteSteps.getOrNull(navStepIndex.coerceAtMost(navRouteSteps.lastIndex))
-                    val turnIcon = when {
-                        currentStep == null || currentStep.maneuverType == "arrive" -> Icons.Default.Navigation
-                        currentStep.modifier.contains("left") -> Icons.Default.TurnLeft
-                        currentStep.modifier.contains("right") -> Icons.Default.TurnRight
-                        else -> Icons.Default.Navigation
-                    }
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -375,7 +360,7 @@ fun RouteBuilderScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            turnIcon,
+                                            if (navStepIndex % 2 == 0) Icons.Default.TurnRight else Icons.Default.TurnLeft,
                                             contentDescription = null,
                                             tint = Color.White,
                                             modifier = Modifier.size(26.dp)
@@ -384,11 +369,11 @@ fun RouteBuilderScreen(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = currentStep?.instruction ?: "Routing…",
+                                            text = if (navStepIndex % 2 == 0) "In 150m, Turn Right" else "In 220m, Turn Left",
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White)
                                         )
                                         Text(
-                                            text = currentStep?.roadName?.let { "Via $it • Follow Route" } ?: "Follow Route",
+                                            text = "Onto Pine Ridge Trail • Follow Route",
                                             style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF94A3B8))
                                         )
                                     }
@@ -417,11 +402,11 @@ fun RouteBuilderScreen(
                                     }
                                     Column {
                                         Text("ETA", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
-                                        Text("$navEtaMinutes min", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
+                                        Text("14 min", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
                                     }
                                     Column {
                                         Text("SPEED", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
-                                        Text("—", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
+                                        Text("5.2 km/h", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
                                     }
                                 }
 
@@ -558,40 +543,17 @@ fun RouteBuilderScreen(
                                     if (builderPoints.size < 2) {
                                         Toast.makeText(context, "Add at least 2 points to start navigation", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        scope.launch {
-                                            isRouteLoading = true
-                                            try {
-                                                val coords = builderPoints.map { it.latitude to it.longitude }
-                                                val result = RoutingEngine.fetchRoute(coords)
-                                                builderPoints = result.points
-                                                navRouteSteps = result.steps
-                                                navEtaMinutes = (result.durationSeconds / 60.0).toInt().coerceAtLeast(1)
-                                                val entity = SavedRouteEntity(
-                                                    title = activeNavRouteName,
-                                                    name = activeNavRouteName,
-                                                    description = "Turn-by-turn route",
-                                                    distanceMeters = result.distanceMeters,
-                                                    routePointsJson = MilesRepository.pointsToJson(result.points)
-                                                )
-                                                onUpdateNavigationSteps?.invoke(result.steps)
-                                                isNavigatingLive = true
-                                                onStartNavigation?.invoke(entity)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Couldn't fetch a route — check your connection", Toast.LENGTH_LONG).show()
-                                            } finally {
-                                                isRouteLoading = false
-                                            }
-                                        }
+                                        isNavigatingLive = true
+                                        Toast.makeText(context, "Turn-by-turn navigation started", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                enabled = !isRouteLoading,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                 modifier = Modifier.weight(1.3f),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (isRouteLoading) "Routing…" else "Navigate", fontWeight = FontWeight.Bold)
+                                Text("Navigate", fontWeight = FontWeight.Bold)
                             }
 
                             // Save Route
@@ -718,44 +680,16 @@ fun RouteBuilderScreen(
                                     ) {
                                         Button(
                                             onClick = {
-                                                scope.launch {
-                                                    isRouteLoading = true
-                                                    try {
-                                                        val pts = MilesRepository.parsePoints(route.routePointsJson)
-                                                        val coords = pts.take(10).map { it.latitude to it.longitude }
-                                                        val result = RoutingEngine.fetchRoute(coords)
-                                                        activeNavRouteName = route.name
-                                                        selectedTabIndex = 0
-                                                        isNavigatingLive = true
-                                                        builderPoints = result.points
-                                                        navRouteSteps = result.steps
-                                                        navEtaMinutes = (result.durationSeconds / 60.0).toInt().coerceAtLeast(1)
-                                                        val entity = SavedRouteEntity(
-                                                            id = route.id,
-                                                            title = route.title,
-                                                            name = route.name,
-                                                            description = route.description,
-                                                            activityType = route.activityType,
-                                                            distanceMeters = result.distanceMeters,
-                                                            routePointsJson = MilesRepository.pointsToJson(result.points),
-                                                            waypointsJson = route.waypointsJson,
-                                                            isFavorite = route.isFavorite
-                                                        )
-                                                        onUpdateNavigationSteps?.invoke(result.steps)
-                                                        onStartNavigation?.invoke(entity)
-                                                    } catch (e: Exception) {
-                                                        Toast.makeText(context, "Couldn't fetch a route — check your connection", Toast.LENGTH_LONG).show()
-                                                    } finally {
-                                                        isRouteLoading = false
-                                                    }
-                                                }
+                                                activeNavRouteName = route.name
+                                                selectedTabIndex = 0
+                                                isNavigatingLive = true
+                                                Toast.makeText(context, "Starting navigation on ${route.name}", Toast.LENGTH_SHORT).show()
                                             },
-                                            enabled = !isRouteLoading,
                                             shape = RoundedCornerShape(12.dp)
                                         ) {
                                             Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text(if (isRouteLoading) "Routing…" else "Start Navigation")
+                                            Text("Start Navigation")
                                         }
                                     }
                                 }

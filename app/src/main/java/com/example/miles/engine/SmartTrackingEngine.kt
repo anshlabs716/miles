@@ -75,13 +75,6 @@ data class LiveWorkoutStats(
     val navRemainingDistanceM: Double = 0.0,
     val navProgressPercent: Float = 0f,
 
-    // Turn-by-turn navigation steps (from RoutingEngine / OSRM)
-    val navStepIndex: Int = 0,
-    val navStepInstruction: String = "",
-    val navStepModifier: String = "",
-    val navStepDistanceM: Double = 0.0,
-    val navHasArrived: Boolean = false,
-
     // Progressive Interval Workout
     val activeIntervalPlanName: String? = null,
     val intervalIndex: Int = 0,
@@ -377,14 +370,6 @@ class SmartTrackingEngine(
     private var targetNavPoints: List<GpsPoint> = emptyList()
     private var targetNavWaypoints: List<Waypoint> = emptyList()
 
-    // Turn-by-turn step tracking
-    private var activeNavSteps: List<OsmRouteStep> = emptyList()
-    private var navStepIdx = 0
-    private var navApproachAnnounced = false
-    private var navTurnNowAnnounced = false
-    private var navArrived = false
-    private var navStepGeometryIdx: List<Int> = emptyList()
-
     // Active Interval Workout state
     private var activeIntervals: List<WorkoutInterval> = emptyList()
     private var currentIntervalIdx: Int = 0
@@ -396,12 +381,6 @@ class SmartTrackingEngine(
         if (route == null) {
             targetNavPoints = emptyList()
             targetNavWaypoints = emptyList()
-            activeNavSteps = emptyList()
-            navStepIdx = 0
-            navApproachAnnounced = false
-            navTurnNowAnnounced = false
-            navArrived = false
-            navStepGeometryIdx = emptyList()
             _liveStats.value = _liveStats.value.copy(
                 activeNavRoute = null,
                 navTargetPoints = emptyList(),
@@ -411,12 +390,7 @@ class SmartTrackingEngine(
                 navCrossTrackErrorM = 0.0,
                 navIsOffRoute = false,
                 navRemainingDistanceM = 0.0,
-                navProgressPercent = 0f,
-                navStepIndex = 0,
-                navStepInstruction = "",
-                navStepModifier = "",
-                navStepDistanceM = 0.0,
-                navHasArrived = false
+                navProgressPercent = 0f
             )
             return
         }
@@ -425,12 +399,6 @@ class SmartTrackingEngine(
         val waypoints = MilesRepository.parseWaypoints(route.waypointsJson)
         targetNavPoints = points
         targetNavWaypoints = waypoints
-        activeNavSteps = emptyList()
-        navStepIdx = 0
-        navApproachAnnounced = false
-        navTurnNowAnnounced = false
-        navArrived = false
-        navStepGeometryIdx = emptyList()
 
         _liveStats.value = _liveStats.value.copy(
             activeNavRoute = route,
@@ -444,61 +412,6 @@ class SmartTrackingEngine(
 
     fun stopNavigation() {
         setNavigationRoute(null)
-    }
-
-    /**
-     * Feeds turn-by-turn steps (from [RoutingEngine]) into live navigation.
-     * Call right after [setNavigationRoute] so steps align with route geometry.
-     */
-    fun setNavigationSteps(steps: List<OsmRouteStep>) {
-        if (steps.isEmpty()) {
-            activeNavSteps = emptyList()
-            navStepIdx = 0
-            navArrived = false
-            _liveStats.value = _liveStats.value.copy(
-                navStepIndex = 0,
-                navStepInstruction = "",
-                navStepModifier = "",
-                navStepDistanceM = 0.0,
-                navHasArrived = false
-            )
-            return
-        }
-        activeNavSteps = steps
-        navStepIdx = 0
-        navApproachAnnounced = false
-        navTurnNowAnnounced = false
-        navArrived = false
-        rebuildStepGeometryIndex()
-        _liveStats.value = _liveStats.value.copy(
-            navStepIndex = 0,
-            navStepInstruction = steps.first().instruction,
-            navStepModifier = steps.first().modifier,
-            navStepDistanceM = 0.0,
-            navHasArrived = false
-        )
-    }
-
-    private fun rebuildStepGeometryIndex() {
-        navStepGeometryIdx = if (targetNavPoints.isNotEmpty() && activeNavSteps.isNotEmpty()) {
-            activeNavSteps.map { step ->
-                var best = 0
-                var bestD = Double.MAX_VALUE
-                for (i in targetNavPoints.indices) {
-                    val d = MilesRepository.calculateDistanceMeters(
-                        step.latitude, step.longitude,
-                        targetNavPoints[i].latitude, targetNavPoints[i].longitude
-                    )
-                    if (d < bestD) {
-                        bestD = d
-                        best = i
-                    }
-                }
-                best
-            }
-        } else {
-            emptyList()
-        }
     }
 
     fun startIntervalWorkout(
@@ -614,7 +527,6 @@ class SmartTrackingEngine(
         var navRemainingDist = current.navRemainingDistanceM
         var navProgress = current.navProgressPercent
         var navNextWpName = current.navNextWaypointName
-        var navStepDist = current.navStepDistanceM
 
         if (targetNavPoints.isNotEmpty()) {
             // Find closest point on planned route
@@ -678,44 +590,6 @@ class SmartTrackingEngine(
                 MilesRepository.calculateDistanceMeters(point.latitude, point.longitude, wp.latitude, wp.longitude) > 20.0
             }
             if (nextWp != null) navNextWpName = nextWp.name
-
-            // Turn-by-turn step tracking: announce approaches, turns, and arrival
-            if (activeNavSteps.isNotEmpty() && !navArrived) {
-                if (navStepGeometryIdx.size != activeNavSteps.size) {
-                    rebuildStepGeometryIndex()
-                }
-                while (navStepIdx < activeNavSteps.lastIndex &&
-                    navStepGeometryIdx.size == activeNavSteps.size &&
-                    closestIdx > navStepGeometryIdx[navStepIdx]
-                ) {
-                    navStepIdx++
-                    navApproachAnnounced = false
-                    navTurnNowAnnounced = false
-                }
-                val step = activeNavSteps[navStepIdx]
-                navStepDist = MilesRepository.calculateDistanceMeters(
-                    point.latitude, point.longitude, step.latitude, step.longitude
-                )
-                if (step.maneuverType == "arrive") {
-                    if (navStepDist < 25.0 || (navRemainingDist < 20.0 && navStepIdx == activeNavSteps.lastIndex)) {
-                        navArrived = true
-                        _events.tryEmit(TrackingEvent.NavigationAlert("You have arrived at your destination ✓"))
-                        navigationTts.announceArrival(activeNavRouteEntity?.name ?: "your destination")
-                    } else if (navStepDist < 100.0 && !navApproachAnnounced) {
-                        navigationTts.speak("Destination ahead in ${navStepDist.toInt()} meters.")
-                        navApproachAnnounced = true
-                    }
-                } else {
-                    if (navStepDist < 150.0 && !navApproachAnnounced) {
-                        navigationTts.announceTurnManeuver(step.instruction, navStepDist)
-                        navApproachAnnounced = true
-                    }
-                    if (navStepDist < 30.0 && !navTurnNowAnnounced) {
-                        navigationTts.speak("${step.instruction} now")
-                        navTurnNowAnnounced = true
-                    }
-                }
-            }
         }
 
         _liveStats.value = current.copy(
@@ -737,12 +611,7 @@ class SmartTrackingEngine(
             navBearingDeg = navBearing,
             navRemainingDistanceM = navRemainingDist,
             navProgressPercent = navProgress,
-            navNextWaypointName = navNextWpName,
-            navStepIndex = navStepIdx,
-            navStepInstruction = activeNavSteps.getOrNull(navStepIdx)?.instruction ?: current.navStepInstruction,
-            navStepModifier = activeNavSteps.getOrNull(navStepIdx)?.modifier ?: current.navStepModifier,
-            navStepDistanceM = navStepDist,
-            navHasArrived = navArrived
+            navNextWaypointName = navNextWpName
         )
     }
 

@@ -40,8 +40,6 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.TurnLeft
-import androidx.compose.material.icons.filled.TurnRight
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -263,13 +261,7 @@ fun WorkoutHudScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = when {
-                                        liveStats.navIsOffRoute -> Icons.Default.Close
-                                        liveStats.navHasArrived -> Icons.Default.Check
-                                        liveStats.navStepModifier.contains("left") -> Icons.Default.TurnLeft
-                                        liveStats.navStepModifier.contains("right") -> Icons.Default.TurnRight
-                                        else -> Icons.Default.Navigation
-                                    },
+                                    imageVector = if (liveStats.navIsOffRoute) Icons.Default.Close else Icons.Default.Navigation,
                                     contentDescription = "Navigation",
                                     tint = if (liveStats.navIsOffRoute) Color(0xFFFF2D55) else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
@@ -278,18 +270,13 @@ fun WorkoutHudScreen(
                                 Column {
                                     Text(
                                         text = if (liveStats.navIsOffRoute) "⚠️ OFF-ROUTE (${liveStats.navCrossTrackErrorM.toInt()}m)"
-                                        else if (liveStats.navHasArrived) "✓ ARRIVED: ${liveStats.activeNavRoute?.name ?: "Destination"}"
                                         else "NAV: ${liveStats.activeNavRoute?.name ?: "Active Route"}",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
                                         color = if (liveStats.navIsOffRoute) Color(0xFFFF2D55) else MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                     Text(
-                                        text = when {
-                                            liveStats.navIsOffRoute -> "Turn around towards route path"
-                                            liveStats.navHasArrived -> "You have arrived at your destination ✓"
-                                            liveStats.navStepInstruction.isNotBlank() -> "${liveStats.navStepInstruction} · ${liveStats.navStepDistanceM.toInt()}m"
-                                            else -> "Next: ${liveStats.navNextWaypointName} (${liveStats.navDistanceToNextM.toInt()}m)"
-                                        },
+                                        text = if (liveStats.navIsOffRoute) "Turn around towards route path"
+                                        else "Next: ${liveStats.navNextWaypointName} (${liveStats.navDistanceToNextM.toInt()}m)",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
