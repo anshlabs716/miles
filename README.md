@@ -20,6 +20,8 @@
 
 > ⌚ **MILES Wear OS is now a separate project:** https://github.com/anshlabs716/miles-wearos
 
+> 📡 **Watch sync without Google:** MILES finds the Wear OS app on the local network (UDP beacon + TCP) — **no Google Play Services, no GMS**. Both apps are F-Droid-eligible.
+
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portability, customization, and a clean UI.
 
 > **Status:** Version 1.0.5
