@@ -70,11 +70,11 @@ import androidx.compose.ui.unit.sp
 /**
  * Android Health Connect System Permissions Sheet.
  * Matches pixel-for-pixel the standard Health Connect permission flow shown in
- * Screenshot_20260922_174955.png ("Allow MILES Wear OS to access your fitness and wellness data?").
+ * Screenshot_20260922_174955.png ("Allow MILES to access your fitness and wellness data?").
  */
 @Composable
 fun PermissionPromptScreen(
-    appName: String = "MILES Wear OS",
+    appName: String = "MILES",
     onAllow: () -> Unit,
     onDeny: () -> Unit
 ) {
@@ -141,7 +141,7 @@ fun PermissionPromptScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Title: "Allow MILES Wear OS to access your fitness and wellness data?"
+                // Title: "Allow MILES to access your fitness and wellness data?"
                 val titleAnnotated = buildAnnotatedString {
                     append("Allow ")
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = textWhite)) {
@@ -293,7 +293,7 @@ fun PermissionPromptScreen(
 
                 Spacer(modifier = Modifier.height(22.dp))
 
-                // Subheader: Allow "MILES Wear OS" to read
+                // Subheader: Allow "MILES" to read
                 Text(
                     text = "Allow \"$appName\" to read",
                     style = MaterialTheme.typography.labelLarge.copy(
