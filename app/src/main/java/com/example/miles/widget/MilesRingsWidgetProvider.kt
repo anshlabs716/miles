@@ -16,14 +16,32 @@ class MilesRingsWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         val prefs = context.getSharedPreferences(PREFS_WIDGET, Context.MODE_PRIVATE)
-        val calories = prefs.getInt(KEY_CALORIES, 0)
-        val calGoal = prefs.getInt(KEY_CAL_GOAL, 500).coerceAtLeast(100)
-        val steps = prefs.getInt(KEY_STEPS, 0)
-        val stepGoal = prefs.getInt(KEY_STEP_GOAL, 8000).coerceAtLeast(1000)
-        val activeMin = prefs.getInt(KEY_ACTIVE_MIN, 0)
-        val activeGoal = prefs.getInt(KEY_ACTIVE_GOAL, 45).coerceAtLeast(10)
+
+        // Real data only: pull today's live values straight from the real sources
+        // (pedometer + workout records), never from stale/seed widget prefs.
+        val settingsPrefs = context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
+        val pedPrefs = context.getSharedPreferences("miles_pedometer", Context.MODE_PRIVATE)
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val dateOk = settingsPrefs.getString("today_workout_date", null) == today
+        val calories = if (dateOk) settingsPrefs.getInt("today_workout_calories", 0).coerceAtLeast(0) else 0
+        val activeMin = if (dateOk) settingsPrefs.getInt("today_workout_duration_min", 0).coerceAtLeast(0) else 0
+        val steps = pedPrefs.getInt("today_steps", 0).coerceAtLeast(0)
+
+        val calGoal = settingsPrefs.getInt("daily_calorie_goal", 500).coerceAtLeast(100)
+        val stepGoal = settingsPrefs.getInt("daily_step_goal", 8000).coerceAtLeast(1000)
+        val activeGoal = settingsPrefs.getInt("daily_active_min_goal", 45).coerceAtLeast(10)
         val hrBpm = prefs.getInt(KEY_HR_BPM, -1).takeIf { it > 0 }
         val isWatchConnected = prefs.getBoolean(KEY_WATCH_CONNECTED, false)
+
+        // Overwrite any stale/seed values so the widget is always honest.
+        prefs.edit()
+            .putInt(KEY_CALORIES, calories)
+            .putInt(KEY_CAL_GOAL, calGoal)
+            .putInt(KEY_STEPS, steps)
+            .putInt(KEY_STEP_GOAL, stepGoal)
+            .putInt(KEY_ACTIVE_MIN, activeMin)
+            .putInt(KEY_ACTIVE_GOAL, activeGoal)
+            .apply()
 
         for (appWidgetId in appWidgetIds) {
             val views = buildRemoteViews(context, calories, calGoal, steps, stepGoal, activeMin, activeGoal, hrBpm, isWatchConnected)
