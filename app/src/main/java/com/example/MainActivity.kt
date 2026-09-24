@@ -335,7 +335,7 @@ class MainActivity : ComponentActivity() {
                                             onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } }
                                         )
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
-                                        MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
+                                        MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD }, onUpdateNavigationSteps = { steps -> smartEngine.setNavigationSteps(steps) })
                                         MilesNavigationTab.PROFILE -> SettingsScreen(
                                             preferences = preferences,
                                             repository = repository,
