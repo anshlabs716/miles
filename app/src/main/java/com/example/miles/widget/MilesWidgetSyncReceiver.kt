@@ -49,9 +49,25 @@ class MilesWidgetSyncReceiver : BroadcastReceiver() {
             CoroutineScope(Dispatchers.IO).launch {
                 val userPrefs = prefs.userPreferences.firstOrNull() ?: return@launch
                 val settingsPrefs = context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
-                val todayCal = settingsPrefs.getInt("today_workout_calories", 240)
-                val todayMin = settingsPrefs.getInt("today_workout_duration_min", 32)
-                val steps = settingsPrefs.getInt("today_step_count", 6420)
+                val pedPrefs = context.getSharedPreferences("miles_pedometer", Context.MODE_PRIVATE)
+
+                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+
+                // Real workout totals accumulate across days; reset them when the day rolls over.
+                val storedDate = settingsPrefs.getString("today_workout_date", null)
+                if (storedDate != today) {
+                    settingsPrefs.edit()
+                        .putString("today_workout_date", today)
+                        .putInt("today_workout_calories", 0)
+                        .putInt("today_workout_duration_min", 0)
+                        .putFloat("today_workout_distance_m", 0f)
+                        .apply()
+                }
+                val todayCal = settingsPrefs.getInt("today_workout_calories", 0).coerceAtLeast(0)
+                val todayMin = settingsPrefs.getInt("today_workout_duration_min", 0).coerceAtLeast(0)
+
+                // Real steps from the pedometer's today counter (never guessed).
+                val steps = pedPrefs.getInt("today_steps", 0).coerceAtLeast(0)
 
                 MilesWidgetUpdater.updateAllWidgets(
                     context = context,
