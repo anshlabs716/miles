@@ -59,22 +59,6 @@
         <activity-alias android:name="com.example.MainActivityLime" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_lime" android:roundIcon="@mipmap/ic_launcher_lime" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
         <activity-alias android:name="com.example.MainActivityRoyal" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_royal" android:roundIcon="@mipmap/ic_launcher_royal" android:label="@string/app_name" android:targetActivity="com.example.MainActivity"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity-alias>
 
-        <!-- MILES Android Auto Navigation Service -->
-        <service
-            android:name="com.example.miles.auto.MilesCarAppService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.NAVIGATION"/>
-            </intent-filter>
-        </service>
-        <meta-data
-            android:name="androidx.car.app.minCarApiLevel"
-            android:value="1" />
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
-
         <!-- MILES Home Screen Widgets -->
         <receiver
             android:name="com.example.miles.widget.MilesRingsWidgetProvider"

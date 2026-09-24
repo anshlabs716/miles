@@ -160,8 +160,7 @@ class SmartTrackingEngine(
         private var instance: SmartTrackingEngine? = null
 
         /**
-         * Returns the process-wide tracking engine, creating it lazily if needed
-         * (e.g. when Android Auto starts the app process without opening the Activity).
+         * Returns the process-wide tracking engine, creating it lazily if needed.
          */
         fun getInstance(context: Context, repository: MilesRepository? = null): SmartTrackingEngine {
             instance?.let { return it }
