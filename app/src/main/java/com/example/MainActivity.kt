@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
         database = MilesDatabase.getInstance(this)
         repository = MilesRepository(database.activityDao(), database.savedRouteDao(), database.privacyZoneDao(), database.goalDao())
         preferences = MilesPreferences(this)
-        smartEngine = SmartTrackingEngine(this, repository)
+        smartEngine = SmartTrackingEngine.getInstance(this, repository)
         wearCompanion = WearCompanionManager(this)
         deviceManager = DeviceManager(this)
         mediaIntegration = MediaIntegration(this)

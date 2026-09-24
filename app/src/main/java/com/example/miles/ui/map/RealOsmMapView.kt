@@ -115,7 +115,8 @@ fun RealOsmMapView(
     currentTileSource: RealOsmTileSource? = null,
     onTileSourceChanged: ((RealOsmTileSource) -> Unit)? = null,
     onCenterChanged: ((Double, Double) -> Unit)? = null,
-    recenterRequest: Int = 0
+    recenterRequest: Int = 0,
+    zoomRequest: Int = 0
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -247,6 +248,15 @@ fun RealOsmMapView(
                 centerLon = loc.longitude
                 onCenterChanged?.invoke(centerLat, centerLon)
             }
+        }
+    }
+
+    // External zoom request (e.g. toolbar +/- buttons). Positive = zoom in, negative = zoom out.
+    LaunchedEffect(zoomRequest) {
+        if (zoomRequest > 0) {
+            zoomLevel = (zoomLevel + 1f).coerceIn(3f, 19f)
+        } else if (zoomRequest < 0) {
+            zoomLevel = (zoomLevel - 1f).coerceIn(3f, 19f)
         }
     }
 

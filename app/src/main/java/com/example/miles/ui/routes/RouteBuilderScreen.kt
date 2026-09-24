@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.PinDrop
+import androidx.compose.material.icons.filled.Remove
 
 
 import androidx.compose.material.icons.filled.Route
@@ -141,6 +142,7 @@ fun RouteBuilderScreen(
     var showPlacesDialog by remember { mutableStateOf(false) }
     var is3dMode by remember { mutableStateOf(false) }
     var recenterRequest by remember { mutableIntStateOf(0) }
+    var zoomRequest by remember { mutableIntStateOf(0) }
 
     // Builder Points & Waypoints
     var builderPoints by remember { mutableStateOf<List<GpsPoint>>(emptyList()) }
@@ -249,6 +251,7 @@ fun RouteBuilderScreen(
                     currentTileSource = selectedTileSource,
                     onTileSourceChanged = { selectedTileSource = it },
                     recenterRequest = recenterRequest,
+                    zoomRequest = zoomRequest,
                     onCenterChanged = { lat, lng ->
                         centerLat = lat
                         centerLon = lng
@@ -307,6 +310,26 @@ fun RouteBuilderScreen(
                             modifier = Modifier.size(44.dp)
                         ) {
                             Icon(Icons.Default.MyLocation, contentDescription = "My Location", modifier = Modifier.size(20.dp))
+                        }
+
+                        // 4. Zoom In (+)
+                        FloatingActionButton(
+                            onClick = { zoomRequest += 1 },
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Zoom In", modifier = Modifier.size(20.dp))
+                        }
+
+                        // 5. Zoom Out (−)
+                        FloatingActionButton(
+                            onClick = { zoomRequest -= 1 },
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Zoom Out", modifier = Modifier.size(20.dp))
                         }
                     }
                 }

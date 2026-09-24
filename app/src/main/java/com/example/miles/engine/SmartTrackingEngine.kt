@@ -2,6 +2,7 @@ package com.example.miles.engine
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.miles.data.local.MilesDatabase
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.model.GpsPoint
@@ -152,6 +153,32 @@ class SmartTrackingEngine(
 
     init {
         restoreTrackingStateIfAvailable()
+    }
+
+    companion object {
+        @Volatile
+        private var instance: SmartTrackingEngine? = null
+
+        /**
+         * Returns the process-wide tracking engine, creating it lazily if needed
+         * (e.g. when Android Auto starts the app process without opening the Activity).
+         */
+        fun getInstance(context: Context, repository: MilesRepository? = null): SmartTrackingEngine {
+            instance?.let { return it }
+            return synchronized(this) {
+                instance ?: run {
+                    val appContext = context.applicationContext
+                    val db = MilesDatabase.getInstance(appContext)
+                    val repo = repository ?: MilesRepository(
+                        db.activityDao(),
+                        db.savedRouteDao(),
+                        db.privacyZoneDao(),
+                        db.goalDao()
+                    )
+                    SmartTrackingEngine(appContext, repo).also { instance = it }
+                }
+            }
+        }
     }
 
     fun setGhostModeActivity(activity: ActivityEntity?) {
