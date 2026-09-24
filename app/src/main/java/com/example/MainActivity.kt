@@ -115,6 +115,14 @@ class MainActivity : ComponentActivity() {
         pedometerManager = PedometerManager(this, preferences)
         moveReminderManager = MoveReminderManager(this, preferences)
         healthConnectManager = HealthConnectManager(this)
+        // Advertise miles_phone_app over the Wearable data layer so the MILES
+        // Wear OS app can detect this phone app "nearby" on a paired watch
+        // (and report it as reachable locally on the same device).
+        try {
+            com.google.android.gms.wearable.Wearable.getCapabilityClient(this)
+                .addLocalCapability("miles_phone_app")
+        } catch (_: Exception) {
+        }
         moveReminderManager.scheduleNextReminder()
         com.example.miles.widget.MilesWidgetSyncReceiver.schedulePeriodicSync(this)
         com.example.miles.widget.MilesWidgetSyncReceiver.syncWidgetsNow(this)
