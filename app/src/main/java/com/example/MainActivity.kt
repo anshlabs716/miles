@@ -73,7 +73,6 @@ import com.example.miles.ui.journal.JournalScreen
 import com.example.miles.ui.routes.RouteBuilderScreen
 import com.example.miles.ui.settings.SettingsScreen
 import com.example.miles.ui.setup.OnboardingSetupScreen
-import com.example.miles.ui.setup.PermissionPromptScreen
 import com.example.miles.ui.studio.DistanceCalculatorScreen
 import com.example.miles.ui.studio.MilesStudioScreen
 import com.example.miles.ui.theme.MilesTheme
@@ -87,7 +86,7 @@ enum class MilesNavigationTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home), TRAINING("Training", Icons.Default.FitnessCenter), JOURNAL("Journal", Icons.AutoMirrored.Filled.List), ROUTES("Routes", Icons.Default.Map), PROFILE("Profile", Icons.Default.Person)
 }
 
-enum class MilesSubScreen { NONE, SETUP, ACTIVITY_DETAIL, WORKOUT_HUD, DEVICES, STUDIO, DISTANCE_CALCULATOR, PERMISSIONS_PROMPT, TOOLS }
+enum class MilesSubScreen { NONE, SETUP, ACTIVITY_DETAIL, WORKOUT_HUD, DEVICES, STUDIO, DISTANCE_CALCULATOR, TOOLS }
 
 class MainActivity : ComponentActivity() {
     private lateinit var database: MilesDatabase
@@ -187,6 +186,15 @@ class MainActivity : ComponentActivity() {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT) }
                 }.toTypedArray()
             }
+            // Real permission flow: fires the actual Android system permission dialog, and the
+            // real Health Connect sheet. On first launch the launcher callback requests Health
+            // Connect (so HC only appears once); on later manual requests both are launched here.
+            val requestSystemHealthPermissions = {
+                allPermissionsLauncher.launch(requiredPermissions)
+                if (userPrefs.healthConnectFirstBootHandled && healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
+                    requestHealthConnectPermissions()
+                }
+            }
             val permissionPromptVisible = !userPrefs.permissionPromptShown
 
             LaunchedEffect(Unit) {
@@ -227,7 +235,6 @@ class MainActivity : ComponentActivity() {
 
                 BackHandler(enabled = true) {
                     when {
-                        subScreen == MilesSubScreen.PERMISSIONS_PROMPT -> subScreen = MilesSubScreen.NONE
                         subScreen == MilesSubScreen.DISTANCE_CALCULATOR -> subScreen = MilesSubScreen.STUDIO
                         subScreen == MilesSubScreen.ACTIVITY_DETAIL -> subScreen = MilesSubScreen.NONE
                         subScreen == MilesSubScreen.STUDIO -> subScreen = MilesSubScreen.NONE
@@ -252,17 +259,21 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (permissionPromptVisible) {
-                    PermissionPromptScreen(
-                        onAllow = {
-                            preferences.markPermissionPromptShown()
-                            allPermissionsLauncher.launch(requiredPermissions)
-                            if (healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
-                                requestHealthConnectPermissions()
-                            }
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("MILES needs your health data", style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) },
+                        text = { Text("MILES reads your phone's real sensors: location for GPS routes, activity recognition for steps, body sensors for heart rate, and Health Connect for steps & workouts. Android will show you each permission — you can grant or deny any of them, and change them later in MILES privacy settings.", style = MaterialTheme.typography.bodyMedium) },
+                        confirmButton = {
+                            Button(onClick = {
+                                preferences.markPermissionPromptShown()
+                                requestSystemHealthPermissions()
+                            }) { Text("Continue") }
                         },
-                        onDeny = {
-                            preferences.markPermissionPromptShown()
-                            preferences.markHealthConnectFirstBootHandled()
+                        dismissButton = {
+                            TextButton(onClick = {
+                                preferences.markPermissionPromptShown()
+                                preferences.markHealthConnectFirstBootHandled()
+                            }) { Text("Maybe Later") }
                         }
                     )
                 } else if (!userPrefs.hasCompletedSetup || subScreen == MilesSubScreen.SETUP) {
@@ -287,19 +298,6 @@ class MainActivity : ComponentActivity() {
                                     MilesSubScreen.DEVICES -> DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion, preferences = preferences, moveReminderManager = moveReminderManager)
                                     MilesSubScreen.STUDIO -> MilesStudioScreen(repository = repository, smartEngine = smartEngine, wearCompanion = wearCompanion, preferences = preferences, onBack = { subScreen = MilesSubScreen.NONE }, onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR })
                                     MilesSubScreen.DISTANCE_CALCULATOR -> DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
-                                    MilesSubScreen.PERMISSIONS_PROMPT -> PermissionPromptScreen(
-                                        onAllow = {
-                                            preferences.markPermissionPromptShown()
-                                            allPermissionsLauncher.launch(requiredPermissions)
-                                            if (healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
-                                                requestHealthConnectPermissions()
-                                            }
-                                            subScreen = MilesSubScreen.NONE
-                                        },
-                                        onDeny = {
-                                            subScreen = MilesSubScreen.NONE
-                                        }
-                                    )
                                     MilesSubScreen.TOOLS -> ToolsDiagnosticsScreen(onBack = { subScreen = MilesSubScreen.NONE })
                                     MilesSubScreen.SETUP -> Unit
                                     MilesSubScreen.NONE -> when (currentTab) {
@@ -325,7 +323,7 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onOpenStudio = { subScreen = MilesSubScreen.STUDIO },
                                             onOpenTools = { subScreen = MilesSubScreen.TOOLS },
-                                            onOpenPermissionsPrompt = { subScreen = MilesSubScreen.PERMISSIONS_PROMPT },
+                                            onOpenPermissionsPrompt = requestSystemHealthPermissions,
                                             onOpenRoutes = { currentTab = MilesNavigationTab.ROUTES },
                                             onOpenStats = { currentTab = MilesNavigationTab.JOURNAL }
                                         )
@@ -344,7 +342,7 @@ class MainActivity : ComponentActivity() {
                                             onOpenStudio = { subScreen = MilesSubScreen.STUDIO },
                                             onOpenDevices = { subScreen = MilesSubScreen.DEVICES },
                                             onRerunSetup = { subScreen = MilesSubScreen.SETUP },
-                                            onOpenPermissionsPrompt = { subScreen = MilesSubScreen.PERMISSIONS_PROMPT },
+                                            onOpenPermissionsPrompt = requestSystemHealthPermissions,
                                             onOpenTools = { subScreen = MilesSubScreen.TOOLS },
                                             healthConnectState = healthConnectState,
                                             onRequestHealthConnectPermissions = requestHealthConnectPermissions,
