@@ -1,0 +1,79 @@
+// F-Droid build recipe for MILES
+//
+// Mirrors the project's own app/build.gradle.kts exactly (plugin set and
+// dependency versions taken from gradle/libs.versions.toml), with two
+// F-Droid-specific adjustments:
+//   * the roborazzi screenshot-test plugin is omitted (F-Droid does not run tests)
+//   * no signing config, so F-Droid signs the build with its own key
+//
+// If F-Droid's builder cannot provide Android Gradle Plugin 9.1.1 yet, the fix
+// is to lower `agpVersion` here AND in the project's gradle/libs.versions.toml
+// together, then re-tag.
+
+def agpVersion = '9.1.1'
+def composeBomVersion = '2024.09.00'
+def kspVersion = '2.3.5'
+
+apply plugin: 'com.android.application' version agpVersion
+apply plugin: 'org.jetbrains.kotlin.plugin.compose' version '2.2.10'
+apply plugin: 'com.google.devtools.ksp' version kspVersion
+
+android {
+    namespace 'com.example'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.aistudio.miles.track'
+        minSdk 26
+        targetSdk 36
+        versionCode 3
+        versionName '1.0.7'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    // F-Droid supplies its own signing key, so no signingConfig here.
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.18.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'androidx.activity:activity-compose:1.10.1'
+
+    implementation platform("androidx.compose:compose-bom:$composeBomVersion")
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-core'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.navigation:navigation-compose:2.8.9'
+
+    implementation 'androidx.room:room-runtime:2.7.0'
+    implementation 'androidx.room:room-ktx:2.7.0'
+    ksp 'androidx.room:room-compiler:2.7.0'
+
+    implementation 'io.coil-kt:coil-compose:2.7.0'
+
+    implementation 'com.squareup.retrofit2:retrofit:2.12.0'
+    implementation 'com.squareup.retrofit2:converter-moshi:2.12.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.10.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.10.0'
+    implementation 'com.squareup.moshi:moshi-kotlin:1.15.2'
+    ksp 'com.squareup.moshi:moshi-kotlin-codegen:1.15.2'
+
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2'
+    implementation 'androidx.datastore:datastore-preferences:1.1.7'
+    implementation 'androidx.health.connect:connect-client:1.1.0-alpha12'
+}
