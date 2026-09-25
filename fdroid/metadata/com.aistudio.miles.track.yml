@@ -37,6 +37,7 @@ Builds:
   - versionName: 1.0.7
     versionCode: 3
     commit: c6d74523b7eae7d0b09cfe196bfffdb238d892d9
+    gradle: yes
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 1.0.7
