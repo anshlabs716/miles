@@ -118,7 +118,10 @@ fun JournalScreen(
         Box(Modifier.weight(1f)) {
             when (selectedTab) {
                 0 -> HistoryScreen(activities = activities, onSelectActivity = onSelectActivity, onToggleFavorite = onToggleFavorite)
-                1 -> StatisticsScreen(activities = activities)
+                1 -> StatisticsScreen(
+                    activities = activities,
+                    stepGoal = preferences?.userPreferences?.value?.dailyStepGoal ?: 8000
+                )
             }
         }
     }

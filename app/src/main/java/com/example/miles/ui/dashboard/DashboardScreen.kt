@@ -104,6 +104,7 @@ import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.DeviceSourceType
 import com.example.miles.engine.ActivityEstimator
 import com.example.miles.engine.CalorieEstimator
+import com.example.miles.engine.StreakCalculator
 import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
@@ -220,6 +221,7 @@ fun DashboardScreen(
         else -> (todayDurationSec / 60).toInt()
     }
     val activeMinutesAreEstimate = pedometerActiveMinutes == 0 && stepEstimatedActiveMin > 0
+
     // Real calories: finished activities + the in-progress workout + everyday
     // step activity that wasn't part of a recorded workout.
     val liveWorkoutCalories = if (liveStats.state == TrackingState.RECORDING) liveStats.calories else 0
@@ -231,6 +233,17 @@ fun DashboardScreen(
     val calorieGoal = userPreferences.dailyCaloriesGoal.coerceAtLeast(100)
     val stepGoal = userPreferences.dailyStepGoal.coerceAtLeast(1000)
     val activeMinGoal = userPreferences.dailyActiveMinutesGoal.coerceAtLeast(10)
+
+    // Real goal streak: past days from recorded activities, today from live sensors.
+    val realStreak = remember(activities, todaySteps, stepGoal) {
+        val todayKey = StreakCalculator.todayKey()
+        val metDays = StreakCalculator.metDaysFromActivities(
+            activitySteps = activities.map { it.startTime to it.steps },
+            stepGoal = stepGoal,
+            extraDays = if (todaySteps >= stepGoal) setOf(todayKey) else emptySet()
+        )
+        StreakCalculator.currentStreak(metDays, todayKey)
+    }
 
     // Synchronize data with home screen widgets
     LaunchedEffect(totalCalories, calorieGoal, todaySteps, stepGoal, todayActiveMin, activeMinGoal, currentBpm, isWatchConnected, liveStats.state) {
@@ -527,7 +540,11 @@ fun DashboardScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Text("DAILY GOALS & STREAKS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("🔥 5 Day Streak", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFFF5722))
+                            Text(
+                                "🔥 ${StreakCalculator.streakLabel(realStreak)}",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFFFF5722)
+                            )
                         }
                         Spacer(Modifier.height(12.dp))
 
@@ -539,6 +556,20 @@ fun DashboardScreen(
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { (todaySteps.toFloat() / stepGoal).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Active Minutes Goal Progress
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Text("Active: $todayActiveMin / $activeMinGoal min", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                            Text("${((todayActiveMin.toFloat() / activeMinGoal) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { (todayActiveMin.toFloat() / activeMinGoal).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                             color = MaterialTheme.colorScheme.primary
                         )
