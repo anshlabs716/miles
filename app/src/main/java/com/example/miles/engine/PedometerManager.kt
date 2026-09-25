@@ -31,6 +31,13 @@ class PedometerManager(
 
     private val _todaySteps = MutableStateFlow(0)
     val todaySteps: StateFlow<Int> = _todaySteps.asStateFlow()
+
+    /**
+     * Real active minutes today: counts calendar minutes in which the device
+     * actually detected step movement. No estimation from totals.
+     */
+    private val _activeMinutesToday = MutableStateFlow(0)
+    val activeMinutesToday: StateFlow<Int> = _activeMinutesToday.asStateFlow()
     private val _sensorStatus = MutableStateFlow("Starting…")
     val sensorStatus: StateFlow<String> = _sensorStatus.asStateFlow()
     private val _permissionGranted = MutableStateFlow(false)
@@ -49,6 +56,7 @@ class PedometerManager(
     private var emaGravity = 9.81
     private var lastStepTimeMs = 0L
     private var wavePeakDetected = false
+    private var lastActiveMinuteKey: String? = null
 
     init {
         setupSensors()
@@ -58,6 +66,20 @@ class PedometerManager(
 
     private fun currentDate(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+    /** Marks the current minute as active when real step movement is detected. */
+    private fun markActiveMinute() {
+        val minuteKey = SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.getDefault()).format(Date())
+        if (minuteKey == lastActiveMinuteKey) return
+        lastActiveMinuteKey = minuteKey
+        val updated = _activeMinutesToday.value + 1
+        _activeMinutesToday.value = updated
+        prefs.edit()
+            .putString(KEY_ACTIVE_DATE, todayDate)
+            .putInt(KEY_ACTIVE_MINUTES, updated)
+            .putString(KEY_LAST_ACTIVE_MINUTE, minuteKey)
+            .apply()
+    }
 
     private fun hasActivityPermission(): Boolean {
         // Accelerometer fallback does NOT require ACTIVITY_RECOGNITION on Android
@@ -84,6 +106,20 @@ class PedometerManager(
         } else {
             _todaySteps.value = prefs.getInt(KEY_TODAY_STEPS, 0).coerceAtLeast(0)
             lastCounterValue = prefs.getFloat(KEY_LAST_COUNTER, -1f)
+        }
+
+        // Active minutes reset with the day and survive app restarts
+        if (prefs.getString(KEY_ACTIVE_DATE, null) != today) {
+            prefs.edit()
+                .putString(KEY_ACTIVE_DATE, today)
+                .putInt(KEY_ACTIVE_MINUTES, 0)
+                .remove(KEY_LAST_ACTIVE_MINUTE)
+                .apply()
+            _activeMinutesToday.value = 0
+            lastActiveMinuteKey = null
+        } else {
+            _activeMinutesToday.value = prefs.getInt(KEY_ACTIVE_MINUTES, 0).coerceAtLeast(0)
+            lastActiveMinuteKey = prefs.getString(KEY_LAST_ACTIVE_MINUTE, null)
         }
     }
 
@@ -187,6 +223,7 @@ class PedometerManager(
             Sensor.TYPE_STEP_COUNTER -> handleStepCounter(event.values.firstOrNull() ?: return)
             Sensor.TYPE_STEP_DETECTOR -> if ((event.values.firstOrNull() ?: 0f) >= 1f) {
                 persistSteps(_todaySteps.value + 1)
+                markActiveMinute()
                 onStepDetected?.invoke(1)
             }
             Sensor.TYPE_ACCELEROMETER -> handleAccelerometer(event)
@@ -210,6 +247,7 @@ class PedometerManager(
         val delta = (totalSinceBoot - lastCounterValue).toInt().coerceAtLeast(0)
         if (delta > 0) {
             persistSteps(_todaySteps.value + delta)
+            markActiveMinute()
             onStepDetected?.invoke(delta)
         }
         lastCounterValue = totalSinceBoot
@@ -240,12 +278,14 @@ class PedometerManager(
                 lastStepTimeMs = now
                 wavePeakDetected = false
                 persistSteps(_todaySteps.value + 1)
+                markActiveMinute()
                 onStepDetected?.invoke(1)
             } else if (now - lastStepTimeMs > 2000L) {
                 // First step after pause or rest
                 lastStepTimeMs = now
                 wavePeakDetected = false
                 persistSteps(_todaySteps.value + 1)
+                markActiveMinute()
                 onStepDetected?.invoke(1)
             }
         }
@@ -272,5 +312,8 @@ class PedometerManager(
         private const val KEY_TODAY_STEPS = "today_steps"
         private const val KEY_DAY_BASELINE = "day_baseline"
         private const val KEY_LAST_COUNTER = "last_counter"
+        private const val KEY_ACTIVE_DATE = "active_minutes_date"
+        private const val KEY_ACTIVE_MINUTES = "active_minutes_today"
+        private const val KEY_LAST_ACTIVE_MINUTE = "last_active_minute"
     }
 }
