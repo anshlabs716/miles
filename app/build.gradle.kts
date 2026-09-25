@@ -18,14 +18,15 @@ android {
     versionName = "1.0.7"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
+  // Release signing is optional: distro builders (F-Droid) and fresh clones have
+  // no keystore and sign with their own key, so the release variant must build
+  // fine unsigned. The signing config is only created when a keystore exists.
+  val releaseKeystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
+  val hasReleaseKeystore = releaseKeystoreFile.exists()
   signingConfigs {
-    create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      // Only wire up signing when a keystore is actually present. Distro builders
-      // such as F-Droid (and any fresh clone) have no keystore and sign with
-      // their own key, so the release build must still work unsigned.
-      if (file(keystorePath).exists()) {
-        storeFile = file(keystorePath)
+    if (hasReleaseKeystore) {
+      create("release") {
+        storeFile = releaseKeystoreFile
         storePassword = System.getenv("STORE_PASSWORD")
         keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
         keyPassword = System.getenv("KEY_PASSWORD")
@@ -37,8 +38,7 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      val releaseKeystore = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
-      if (releaseKeystore.exists()) {
+      if (hasReleaseKeystore) {
         signingConfig = signingConfigs.getByName("release")
       }
     }
