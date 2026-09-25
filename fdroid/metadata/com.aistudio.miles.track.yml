@@ -2,7 +2,11 @@ Categories:
   - Sports & Health
   - Workout
 License: GPL-3.0-only
+SourceCode: https://github.com/anshlabs716/miles
+IssueTracker: https://github.com/anshlabs716/miles/issues
+Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
 Name: MILES
+AutoName: MILES
 Summary: Privacy-first activity tracker with real GPS, health data and no ads
 Description: |
   MILES is a privacy-first activity and step tracker for Android. Every number
@@ -27,14 +31,12 @@ Description: |
   • Activity data stays on your device and can be exported or deleted at any time
 
   No Google Play Services required. Maps use OpenStreetMap data.
-SourceCode: https://github.com/anshlabs716/miles
-Repo: https://github.com/anshlabs716/miles
 RepoType: git
-IssueTracker: https://github.com/anshlabs716/miles/issues
-Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
+Repo: https://github.com/anshlabs716/miles
 Builds:
-  - versionCode: 3
-    versionName: 1.0.7
+  - versionName: 1.0.7
+    versionCode: 3
+    commit: c6d74523b7eae7d0b09cfe196bfffdb238d892d9
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 1.0.7
