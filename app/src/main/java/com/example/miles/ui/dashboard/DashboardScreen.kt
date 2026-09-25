@@ -102,6 +102,7 @@ import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
 import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.DeviceSourceType
+import com.example.miles.engine.CalorieEstimator
 import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
@@ -204,7 +205,13 @@ fun DashboardScreen(
 
     val todayDurationSec = todayActivities.sumOf { it.durationSeconds }
     val todayDurationMin = todayDurationSec / 60
-    val totalCalories = todayActivities.sumOf { it.calories }
+    // Real calories: finished activities + the in-progress workout + everyday
+    // step activity that wasn't part of a recorded workout.
+    val liveWorkoutCalories = if (liveStats.state == TrackingState.RECORDING) liveStats.calories else 0
+    val workoutStepsToday = todayActivities.sumOf { it.steps } + liveStats.stepCount
+    val everydaySteps = (pedometerSteps - workoutStepsToday).coerceAtLeast(0)
+    val everydayCalories = CalorieEstimator.dailyActiveFromSteps(everydaySteps, userPreferences.bodyWeightKg)
+    val totalCalories = todayActivities.sumOf { it.calories } + liveWorkoutCalories + everydayCalories
 
     val calorieGoal = userPreferences.dailyCaloriesGoal.coerceAtLeast(100)
     val stepGoal = userPreferences.dailyStepGoal.coerceAtLeast(1000)

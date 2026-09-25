@@ -618,17 +618,26 @@ class SmartTrackingEngine(
     }
 
     fun calculateCalories(activityType: ActivityType, elapsedSeconds: Long, distanceMeters: Double, steps: Int): Int {
-        val met = activityType.metScore
-        val timeCals = (met * 70.0 * 3.5 / 200.0) * (elapsedSeconds / 60.0)
-        val distCals = when (activityType) {
-            ActivityType.RUNNING -> distanceMeters * 0.065
-            ActivityType.CYCLING -> distanceMeters * 0.035
-            ActivityType.HIKING -> distanceMeters * 0.055
-            else -> distanceMeters * 0.045
+        val perMetreRate = when (activityType) {
+            ActivityType.RUNNING -> 0.065
+            ActivityType.CYCLING -> 0.035
+            ActivityType.HIKING -> 0.055
+            else -> 0.045
         }
-        val stepCals = steps * 0.04
-        return maxOf(timeCals, distCals + stepCals).toInt().coerceAtLeast(if (elapsedSeconds > 10) 1 else 0)
+        return CalorieEstimator.activityCalories(
+            met = activityType.metScore,
+            weightKg = bodyWeightKg(),
+            elapsedSeconds = elapsedSeconds,
+            distanceMeters = distanceMeters,
+            steps = steps,
+            perMetreRate = perMetreRate
+        )
     }
+
+    /** The user's real body weight (kg) from settings, so estimates are personal. */
+    private fun bodyWeightKg(): Int =
+        context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
+            .getInt("body_weight_kg", 70)
 
     fun processStepDelta(delta: Int) {
         if (_liveStats.value.state != TrackingState.RECORDING || delta <= 0) return
