@@ -1,0 +1,8 @@
+- Real calories, distance and active minutes on the dashboard (were stuck at 0 for everyday walking)
+- Calorie maths now uses your real configured body weight instead of assuming 70 kg
+- Daily goals card gained a real active-minutes row
+- Removed a hardcoded fake "5 Day Streak" — the streak is now calculated from real goal-meeting days
+- Removed hardcoded route ETA ("14 min") and speed ("5.2 km/h") — both derive from your real route distance and your own recorded average speed
+- Removed four hardcoded sample places from the route builder
+- GMS-free watch sync over the local network (no Google Play Services)
+- Home screen widget no longer shows fake data

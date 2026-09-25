@@ -7,7 +7,9 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  // Plain API 36 (not the 36.1 minor release) so distro builders such as
+  // F-Droid only need the standard Android 16 SDK installed.
+  compileSdk = 36
   defaultConfig {
     applicationId = "com.aistudio.miles.track"
     minSdk = 26
@@ -16,13 +18,19 @@ android {
     versionName = "1.0.7"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
+  // Release signing is optional: distro builders (F-Droid) and fresh clones have
+  // no keystore and sign with their own key, so the release variant must build
+  // fine unsigned. The signing config is only created when a keystore exists.
+  val releaseKeystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
+  val hasReleaseKeystore = releaseKeystoreFile.exists()
   signingConfigs {
-    create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+    if (hasReleaseKeystore) {
+      create("release") {
+        storeFile = releaseKeystoreFile
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+        keyPassword = System.getenv("KEY_PASSWORD")
+      }
     }
   }
   buildTypes {
@@ -30,7 +38,9 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      if (hasReleaseKeystore) {
+        signingConfig = signingConfigs.getByName("release")
+      }
     }
     debug { }
   }

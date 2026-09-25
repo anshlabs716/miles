@@ -1,1 +1,1 @@
-Privacy-focused activity tracker with GPS, steps, health data and maps
+Privacy-first activity tracker with real GPS, health data and no ads
