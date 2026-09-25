@@ -86,7 +86,6 @@ data class UserPreferences(
     val dailyStepGoal: Int = 8000,
     val dailyActiveMinutesGoal: Int = 45,
     val dailyCaloriesGoal: Int = 500,
-    val bodyWeightKg: Int = 70,
     val weeklyDistanceGoalKm: Float = 25.0f,
     val theme: BaseThemeOption = BaseThemeOption.TWILIGHT,
     val liquidGlassEnabled: Boolean = true,
@@ -215,7 +214,6 @@ class MilesPreferences(context: Context) {
         val stepGoal = prefs.getInt("daily_step_goal", 8000)
         val activeMinGoal = prefs.getInt("daily_active_min_goal", 45)
         val calorieGoal = prefs.getInt("daily_calorie_goal", 500)
-        val bodyWeight = prefs.getInt("body_weight_kg", 70)
         val weeklyDistGoal = prefs.getFloat("weekly_dist_goal", 25.0f)
 
         val themeStr = prefs.getString("theme", BaseThemeOption.TWILIGHT.name) ?: BaseThemeOption.TWILIGHT.name
@@ -250,7 +248,6 @@ class MilesPreferences(context: Context) {
             dailyStepGoal = stepGoal,
             dailyActiveMinutesGoal = activeMinGoal,
             dailyCaloriesGoal = calorieGoal,
-            bodyWeightKg = bodyWeight,
             weeklyDistanceGoalKm = weeklyDistGoal,
             theme = theme,
             liquidGlassEnabled = prefs.getBoolean("liquid_glass", true),
@@ -593,13 +590,6 @@ class MilesPreferences(context: Context) {
         val clamped = calories.coerceIn(100, 10000)
         prefs.edit().putInt("daily_calorie_goal", clamped).apply()
         _userPreferences.value = _userPreferences.value.copy(dailyCaloriesGoal = clamped)
-    }
-
-    /** Real body weight used to personalise calorie estimates. */
-    fun setBodyWeightKg(kg: Int) {
-        val clamped = kg.coerceIn(30, 250)
-        prefs.edit().putInt("body_weight_kg", clamped).apply()
-        _userPreferences.value = _userPreferences.value.copy(bodyWeightKg = clamped)
     }
 
     fun setMaxLazyDaysPerWeek(maxDays: Int) {

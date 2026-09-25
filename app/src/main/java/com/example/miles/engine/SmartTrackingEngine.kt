@@ -634,10 +634,10 @@ class SmartTrackingEngine(
         )
     }
 
-    /** The user's real body weight (kg) from settings, so estimates are personal. */
-    private fun bodyWeightKg(): Int =
+    /** The user's real body weight (kg) from the existing profile setting. */
+    private fun bodyWeightKg(): Double =
         context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
-            .getInt("body_weight_kg", 70)
+            .getFloat("user_weight_kg", 70f).toDouble()
 
     fun processStepDelta(delta: Int) {
         if (_liveStats.value.state != TrackingState.RECORDING || delta <= 0) return

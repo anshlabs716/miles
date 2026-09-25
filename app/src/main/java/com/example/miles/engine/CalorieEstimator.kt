@@ -15,7 +15,7 @@ package com.example.miles.engine
 object CalorieEstimator {
 
     /** Keeps body weight in a sane, safe range (kg). */
-    fun clampWeight(weightKg: Int): Double = weightKg.coerceIn(30, 250).toDouble()
+    fun clampWeight(weightKg: Double): Double = weightKg.coerceIn(30.0, 250.0)
 
     /**
      * Calories for a tracked activity.
@@ -23,7 +23,7 @@ object CalorieEstimator {
      */
     fun activityCalories(
         met: Double,
-        weightKg: Int,
+        weightKg: Double,
         elapsedSeconds: Long,
         distanceMeters: Double,
         steps: Int,
@@ -45,7 +45,7 @@ object CalorieEstimator {
      * recorded workout. Walking MET (3.5) at ~100 steps/min gives roughly
      * 400–480 kcal per 10k steps at 70 kg.
      */
-    fun dailyActiveFromSteps(steps: Int, weightKg: Int): Int {
+    fun dailyActiveFromSteps(steps: Int, weightKg: Double): Int {
         if (steps <= 0) return 0
         val kcalPerStep = 3.5 * 3.5 * clampWeight(weightKg) / 200.0 / 100.0
         return (steps * kcalPerStep).toInt().coerceAtLeast(0)

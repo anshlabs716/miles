@@ -210,7 +210,7 @@ fun DashboardScreen(
     val liveWorkoutCalories = if (liveStats.state == TrackingState.RECORDING) liveStats.calories else 0
     val workoutStepsToday = todayActivities.sumOf { it.steps } + liveStats.stepCount
     val everydaySteps = (pedometerSteps - workoutStepsToday).coerceAtLeast(0)
-    val everydayCalories = CalorieEstimator.dailyActiveFromSteps(everydaySteps, userPreferences.bodyWeightKg)
+    val everydayCalories = CalorieEstimator.dailyActiveFromSteps(everydaySteps, userPreferences.userWeightKg.toDouble())
     val totalCalories = todayActivities.sumOf { it.calories } + liveWorkoutCalories + everydayCalories
 
     val calorieGoal = userPreferences.dailyCaloriesGoal.coerceAtLeast(100)
