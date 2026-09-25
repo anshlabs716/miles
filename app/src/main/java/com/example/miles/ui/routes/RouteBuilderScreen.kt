@@ -161,14 +161,17 @@ fun RouteBuilderScreen(
     var navStepIndex by remember { mutableIntStateOf(0) }
     var voiceMuted by remember { mutableStateOf(false) }
 
-    // Saved Places list
+    // Saved Places list — starts EMPTY and only contains places the user
+    // actually dropped. (No hardcoded sample places: that would be fake data.)
     val savedPlaces = remember {
-        mutableStateListOf(
-            SavedPlaceItem("Home", "HOME", 37.7749, -122.4194, Icons.Default.Home),
-            SavedPlaceItem("Work", "WORK", 37.7891, -122.4014, Icons.Default.Work),
-            SavedPlaceItem("Golden Gate Park", "FAVORITE", 37.7694, -122.4862, Icons.Default.Park),
-            SavedPlaceItem("Twin Peaks Lookout", "FAVORITE", 37.7544, -122.4477, Icons.Default.Explore)
-        )
+        mutableStateListOf<SavedPlaceItem>()
+    }
+
+    // Real reference speed from the user's own recorded activities (no invented numbers).
+    // ETA is therefore an estimate and is labelled as one in the UI.
+    val activities by repository.activities.collectAsState(initial = emptyList())
+    val referenceSpeedKmh = remember(activities) {
+        activities.asReversed().firstOrNull { it.avgSpeedKmh > 0.5 }?.avgSpeedKmh
     }
 
     // Calculate total builder distance
@@ -181,6 +184,11 @@ fun RouteBuilderScreen(
             )
         }
         d
+    }
+
+    // ETA from the real distance + the user's own real recorded average speed
+    val etaMinutes = referenceSpeedKmh?.let { speed ->
+        (totalDistanceMeters / 1000.0) / speed * 60.0
     }
 
     Column(
@@ -401,12 +409,18 @@ fun RouteBuilderScreen(
                                         Text("${(totalDistanceMeters / 1000.0).format(2)} km", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
                                     }
                                     Column {
-                                        Text("ETA", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
-                                        Text("14 min", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
+                                        Text("ETA (est)", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
+                                        Text(
+                                            etaMinutes?.let { "${kotlin.math.round(it).toInt()} min" } ?: "--",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White)
+                                        )
                                     }
                                     Column {
-                                        Text("SPEED", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
-                                        Text("5.2 km/h", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White))
+                                        Text("AVG SPEED", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
+                                        Text(
+                                            referenceSpeedKmh?.let { "${it.format(1)} km/h" } ?: "--",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = Color.White)
+                                        )
                                     }
                                 }
 

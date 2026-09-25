@@ -102,6 +102,9 @@ import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
 import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.DeviceSourceType
+import com.example.miles.engine.ActivityEstimator
+import com.example.miles.engine.CalorieEstimator
+import com.example.miles.engine.StreakCalculator
 import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.PedometerManager
 import com.example.miles.engine.SmartTrackingEngine
@@ -142,6 +145,7 @@ fun DashboardScreen(
     val liveStats by smartEngine.liveStats.collectAsState()
     val mediaTrack by mediaIntegration.currentTrack.collectAsState()
     val pedometerSteps by (pedometerManager?.todaySteps?.collectAsState() ?: remember { mutableIntStateOf(0) })
+    val pedometerActiveMinutes by (pedometerManager?.activeMinutesToday?.collectAsState() ?: remember { mutableIntStateOf(0) })
     val currentBpm by deviceManager.heartRateBpm.collectAsState()
     val hasHrCap by deviceManager.hasHeartRateCapability.collectAsState()
     val deviceSources by deviceManager.sources.collectAsState()
@@ -197,28 +201,59 @@ fun DashboardScreen(
         animatedStepCounter.animateTo(rawSteps.toFloat(), tween(1400, easing = FastOutSlowInEasing))
     }
     val todaySteps = animatedStepCounter.value.toInt()
-    val todayDistanceM = todayActivities.sumOf { it.distanceMeters }
+    val todayDistanceM = todayActivities.sumOf { it.distanceMeters } +
+        ActivityEstimator.everydayDistanceMeters(
+            totalSteps = pedometerSteps,
+            workoutSteps = todayActivities.sumOf { it.steps } + liveStats.stepCount,
+            heightCm = userPreferences.userHeightCm
+        )
     val isMetric = userPreferences.unit == DistanceUnit.METRIC
     val todayDistanceDisplay = if (isMetric) todayDistanceM / 1000.0 else todayDistanceM * 0.000621371
     val unitLabel = if (isMetric) "km" else "mi"
 
     val todayDurationSec = todayActivities.sumOf { it.durationSeconds }
-    val todayDurationMin = todayDurationSec / 60
-    val totalCalories = todayActivities.sumOf { it.calories }
+    // Active minutes: real sensor-detected minutes when we have them, otherwise a
+    // clearly-labelled estimate from the real step count, otherwise saved workouts.
+    val stepEstimatedActiveMin = ActivityEstimator.estimatedActiveMinutesFromSteps(pedometerSteps)
+    val todayActiveMin = when {
+        pedometerActiveMinutes > 0 -> pedometerActiveMinutes
+        stepEstimatedActiveMin > 0 -> stepEstimatedActiveMin
+        else -> (todayDurationSec / 60).toInt()
+    }
+    val activeMinutesAreEstimate = pedometerActiveMinutes == 0 && stepEstimatedActiveMin > 0
+
+    // Real calories: finished activities + the in-progress workout + everyday
+    // step activity that wasn't part of a recorded workout.
+    val liveWorkoutCalories = if (liveStats.state == TrackingState.RECORDING) liveStats.calories else 0
+    val workoutStepsToday = todayActivities.sumOf { it.steps } + liveStats.stepCount
+    val everydaySteps = (pedometerSteps - workoutStepsToday).coerceAtLeast(0)
+    val everydayCalories = CalorieEstimator.dailyActiveFromSteps(everydaySteps, userPreferences.userWeightKg.toDouble())
+    val totalCalories = todayActivities.sumOf { it.calories } + liveWorkoutCalories + everydayCalories
 
     val calorieGoal = userPreferences.dailyCaloriesGoal.coerceAtLeast(100)
     val stepGoal = userPreferences.dailyStepGoal.coerceAtLeast(1000)
     val activeMinGoal = userPreferences.dailyActiveMinutesGoal.coerceAtLeast(10)
 
+    // Real goal streak: past days from recorded activities, today from live sensors.
+    val realStreak = remember(activities, todaySteps, stepGoal) {
+        val todayKey = StreakCalculator.todayKey()
+        val metDays = StreakCalculator.metDaysFromActivities(
+            activitySteps = activities.map { it.startTime to it.steps },
+            stepGoal = stepGoal,
+            extraDays = if (todaySteps >= stepGoal) setOf(todayKey) else emptySet()
+        )
+        StreakCalculator.currentStreak(metDays, todayKey)
+    }
+
     // Synchronize data with home screen widgets
-    LaunchedEffect(totalCalories, calorieGoal, todaySteps, stepGoal, todayDurationMin, activeMinGoal, currentBpm, isWatchConnected, liveStats.state) {
+    LaunchedEffect(totalCalories, calorieGoal, todaySteps, stepGoal, todayActiveMin, activeMinGoal, currentBpm, isWatchConnected, liveStats.state) {
         MilesWidgetUpdater.updateAllWidgets(
             context = context,
             calories = totalCalories,
             calGoal = calorieGoal,
             steps = todaySteps,
             stepGoal = stepGoal,
-            activeMin = todayDurationMin.toInt(),
+            activeMin = todayActiveMin,
             activeGoal = activeMinGoal,
             hrBpm = currentBpm,
             isWatchConnected = isWatchConnected,
@@ -384,7 +419,7 @@ fun DashboardScreen(
                         GoogleFitActivityRings(
                             calories = if (hideCalories) 0 else totalCalories,
                             calorieGoal = calorieGoal,
-                            activeMinutes = if (hideActiveTime) 0 else todayDurationMin.toInt(),
+                            activeMinutes = if (hideActiveTime) 0 else todayActiveMin,
                             activeMinGoal = activeMinGoal,
                             steps = if (hideSteps) 0 else todaySteps,
                             stepGoal = stepGoal,
@@ -395,7 +430,7 @@ fun DashboardScreen(
                         Spacer(Modifier.height(20.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
                             if (!hideCalories) MetricPill(Icons.Default.LocalFireDepartment, "$totalCalories", "kcal")
-                            if (!hideActiveTime) MetricPill(Icons.Default.Timer, "$todayDurationMin", "min")
+                            if (!hideActiveTime) MetricPill(Icons.Default.Timer, "$todayActiveMin", if (activeMinutesAreEstimate) "min est" else "min")
                             MetricPill(Icons.Default.Route, todayDistanceDisplay.format(2), unitLabel)
                             if (hasHeartRateDevice) {
                                 val hrText = if (currentBpm != null && currentBpm!! > 0) "$currentBpm" else "--"
@@ -505,7 +540,11 @@ fun DashboardScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Text("DAILY GOALS & STREAKS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("🔥 5 Day Streak", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFFF5722))
+                            Text(
+                                "🔥 ${StreakCalculator.streakLabel(realStreak)}",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFFFF5722)
+                            )
                         }
                         Spacer(Modifier.height(12.dp))
 
@@ -517,6 +556,20 @@ fun DashboardScreen(
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { (todaySteps.toFloat() / stepGoal).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Active Minutes Goal Progress
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Text("Active: $todayActiveMin / $activeMinGoal min", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                            Text("${((todayActiveMin.toFloat() / activeMinGoal) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { (todayActiveMin.toFloat() / activeMinGoal).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                             color = MaterialTheme.colorScheme.primary
                         )

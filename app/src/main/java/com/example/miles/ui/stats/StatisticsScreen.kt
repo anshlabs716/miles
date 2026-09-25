@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
+import com.example.miles.engine.StreakCalculator
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
 import java.text.SimpleDateFormat
@@ -90,7 +91,8 @@ data class FitnessBadge(
 
 @Composable
 fun StatisticsScreen(
-    activities: List<ActivityEntity>
+    activities: List<ActivityEntity>,
+    stepGoal: Int = 8000
 ) {
     var selectedTimeFrame by remember { mutableStateOf(StatsTimeFrame.WEEK) }
     var selectedBadgeDetail by remember { mutableStateOf<FitnessBadge?>(null) }
@@ -152,24 +154,14 @@ fun StatisticsScreen(
         barDistances.add(distKm.toFloat())
     }
 
-    // Dynamic current streak calculation
-    var currentStreak = 0
-    for (i in 0..30) {
-        val checkCal = Calendar.getInstance()
-        checkCal.add(Calendar.DAY_OF_YEAR, -i)
-        checkCal.set(Calendar.HOUR_OF_DAY, 0)
-        checkCal.set(Calendar.MINUTE, 0)
-        checkCal.set(Calendar.SECOND, 0)
-        checkCal.set(Calendar.MILLISECOND, 0)
-        val start = checkCal.timeInMillis
-        val end = start + 86400000L
-
-        val hasAct = activities.any { it.startTime in start until end }
-        if (hasAct) {
-            currentStreak++
-        } else if (i > 0) {
-            break
-        }
+    // Dynamic current streak (shared real logic: goal-meeting days, not just activity days)
+    val currentStreak = remember(activities, stepGoal) {
+        val todayKey = StreakCalculator.todayKey()
+        val metDays = StreakCalculator.metDaysFromActivities(
+            activitySteps = activities.map { it.startTime to it.steps },
+            stepGoal = stepGoal
+        )
+        StreakCalculator.currentStreak(metDays, todayKey)
     }
 
     // Milestones and Badges List
