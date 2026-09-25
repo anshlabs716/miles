@@ -1,6 +1,6 @@
 Categories:
-  - Sports & Fitness
-  - Health & Fitness
+  - Sports & Health
+  - Workout
 License: GPL-3.0-only
 Name: MILES
 Summary: Privacy-first activity tracker with real GPS, health data and no ads
@@ -35,13 +35,6 @@ Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
 Builds:
   - versionCode: 3
     versionName: 1.0.7
-    releaseNotes:
-      - Dashboard calories, distance and active minutes were stuck at 0 for
-        everyday walking; they are now derived from real step, distance and
-        heart-rate data.
-      - Removed a hardcoded "5 Day Streak" placeholder and hardcoded route
-        ETA/speed values; both are now calculated from real data.
-      - GMS-free local-network sync with MILES Wear OS. No Google Play Services.
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 1.0.7
