@@ -30,4 +30,17 @@ object ActivityEstimator {
      */
     fun everydayDistanceMeters(totalSteps: Int, workoutSteps: Int, heightCm: Float): Double =
         distanceMetersFromSteps(everydaySteps(totalSteps, workoutSteps), heightCm)
+
+    /**
+     * Estimated active minutes from the real step count, using a typical
+     * walking cadence of ~100 steps/min. This is an ESTIMATE (shown as
+     * "min est" in the UI) because Android's step counter keeps no history,
+     * so real active minutes can only be counted from the moment the app
+     * starts observing steps. Prefer [PedometerManager.activeMinutesToday]
+     * whenever it has real sensor-detected minutes.
+     */
+    fun estimatedActiveMinutesFromSteps(steps: Int): Int {
+        if (steps <= 0) return 0
+        return (steps / 100.0).toInt()
+    }
 }

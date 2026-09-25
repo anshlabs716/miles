@@ -211,8 +211,15 @@ fun DashboardScreen(
     val unitLabel = if (isMetric) "km" else "mi"
 
     val todayDurationSec = todayActivities.sumOf { it.durationSeconds }
-    // Real active minutes: finished workouts + minutes the sensors actually saw steps
-    val todayActiveMin = (todayDurationSec / 60).toInt() + pedometerActiveMinutes
+    // Active minutes: real sensor-detected minutes when we have them, otherwise a
+    // clearly-labelled estimate from the real step count, otherwise saved workouts.
+    val stepEstimatedActiveMin = ActivityEstimator.estimatedActiveMinutesFromSteps(pedometerSteps)
+    val todayActiveMin = when {
+        pedometerActiveMinutes > 0 -> pedometerActiveMinutes
+        stepEstimatedActiveMin > 0 -> stepEstimatedActiveMin
+        else -> (todayDurationSec / 60).toInt()
+    }
+    val activeMinutesAreEstimate = pedometerActiveMinutes == 0 && stepEstimatedActiveMin > 0
     // Real calories: finished activities + the in-progress workout + everyday
     // step activity that wasn't part of a recorded workout.
     val liveWorkoutCalories = if (liveStats.state == TrackingState.RECORDING) liveStats.calories else 0
@@ -410,7 +417,7 @@ fun DashboardScreen(
                         Spacer(Modifier.height(20.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
                             if (!hideCalories) MetricPill(Icons.Default.LocalFireDepartment, "$totalCalories", "kcal")
-                            if (!hideActiveTime) MetricPill(Icons.Default.Timer, "$todayActiveMin", "min")
+                            if (!hideActiveTime) MetricPill(Icons.Default.Timer, "$todayActiveMin", if (activeMinutesAreEstimate) "min est" else "min")
                             MetricPill(Icons.Default.Route, todayDistanceDisplay.format(2), unitLabel)
                             if (hasHeartRateDevice) {
                                 val hrText = if (currentBpm != null && currentBpm!! > 0) "$currentBpm" else "--"

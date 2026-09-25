@@ -60,4 +60,17 @@ class ActivityEstimatorTest {
         assertEquals(0, ActivityEstimator.everydaySteps(500, 2_000))
         assertEquals(0.0, ActivityEstimator.everydayDistanceMeters(500, 2_000, 175f), 0.0001)
     }
+
+    @Test
+    fun `active minutes estimate uses a realistic walking cadence`() {
+        // ~100 steps/min while walking
+        assertEquals(75, ActivityEstimator.estimatedActiveMinutesFromSteps(7_557))
+        assertEquals(10, ActivityEstimator.estimatedActiveMinutesFromSteps(1_000))
+    }
+
+    @Test
+    fun `no steps means no estimated active minutes`() {
+        assertEquals(0, ActivityEstimator.estimatedActiveMinutesFromSteps(0))
+        assertEquals(0, ActivityEstimator.estimatedActiveMinutesFromSteps(-100))
+    }
 }
