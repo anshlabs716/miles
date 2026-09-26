@@ -5,6 +5,7 @@ License: GPL-3.0-only
 SourceCode: https://github.com/anshlabs716/miles
 IssueTracker: https://github.com/anshlabs716/miles/issues
 Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
+
 Name: MILES
 AutoName: MILES
 Summary: Privacy-first activity tracker with real GPS, health data and no ads
@@ -31,13 +32,17 @@ Description: |
   • Activity data stays on your device and can be exported or deleted at any time
 
   No Google Play Services required. Maps use OpenStreetMap data.
+
 RepoType: git
 Repo: https://github.com/anshlabs716/miles
+
 Builds:
   - versionName: 1.0.7
     versionCode: 3
     commit: c6d74523b7eae7d0b09cfe196bfffdb238d892d9
-    gradle: yes
+    gradle:
+      - yes
+
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 1.0.7
