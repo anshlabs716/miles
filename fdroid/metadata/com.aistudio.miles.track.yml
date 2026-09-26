@@ -8,7 +8,6 @@ Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
 
 Name: MILES
 AutoName: MILES
-Summary: Privacy-first activity tracker with real GPS, health data and no ads
 Description: |
   MILES is a privacy-first activity and step tracker for Android. Every number
   it shows comes from real sensors — the pedometer, GPS and your own heart rate
@@ -42,6 +41,7 @@ Builds:
     commit: c6d74523b7eae7d0b09cfe196bfffdb238d892d9
     gradle:
       - yes
+    output: app/build/outputs/apk/release/app-release-unsigned.apk
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
