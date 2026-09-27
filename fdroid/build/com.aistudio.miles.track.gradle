@@ -40,6 +40,14 @@ android {
         buildConfig true
     }
 
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
     // F-Droid supplies its own signing key, so no signingConfig here.
 }
 
