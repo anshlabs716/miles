@@ -1,6 +1,7 @@
 Categories:
   - Sports & Health
   - Workout
+AuthorName: Ansh
 License: GPL-3.0-only
 SourceCode: https://github.com/anshlabs716/miles
 IssueTracker: https://github.com/anshlabs716/miles/issues
@@ -8,30 +9,6 @@ Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
 
 Name: MILES
 AutoName: MILES
-Description: |
-  MILES is a privacy-first activity and step tracker for Android. Every number
-  it shows comes from real sensors — the pedometer, GPS and your own heart rate
-  — or it is not shown at all.
-
-  Features:
-  • Real step counting and GPS activity tracking
-  • Turn-by-turn navigation with voice guidance
-  • Saved routes and a route builder
-  • Progressive training plans
-  • Heart rate, cadence and barometer support, plus Bluetooth heart-rate straps
-  • Daily calories, distance and active minutes from real measured activity
-  • Resting heart rate and personal records
-  • Fitness pet, weekly goals and badges
-  • Local database with export and backup in standard formats (GPX, CSV, JSON)
-
-  Privacy:
-  • No ads
-  • No account required — not a MILES account, not a Google account
-  • No mandatory analytics or telemetry
-  • Activity data stays on your device and can be exported or deleted at any time
-
-  No Google Play Services required. Maps use OpenStreetMap data.
-
 RepoType: git
 Repo: https://github.com/anshlabs716/miles
 
@@ -39,9 +16,9 @@ Builds:
   - versionName: 1.0.7
     versionCode: 3
     commit: c6d74523b7eae7d0b09cfe196bfffdb238d892d9
+    subdir: app
     gradle:
       - yes
-    output: app/build/outputs/apk/release/app-release-unsigned.apk
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
