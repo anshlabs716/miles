@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -878,6 +879,22 @@ private fun HealthConnectSettingsCard(
             if (state == HealthConnectConnectionState.AVAILABLE_NOT_PERMITTED) {
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(onClick = onRequestPermissions) { Text("Request System Health Connect") }
+                Spacer(modifier = Modifier.height(8.dp))
+                val context = LocalContext.current
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:${context.packageName}")
+                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    }
+                ) {
+                    Text("Permission not granted — Open app settings")
+                }
             }
             if (canOpenSettings) {
                 Spacer(modifier = Modifier.height(8.dp))

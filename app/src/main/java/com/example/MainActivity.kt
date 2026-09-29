@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
             var showBatteryOptDialog by remember { mutableStateOf(powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) }
 
             var healthConnectState by remember { mutableStateOf(HealthConnectConnectionState.UNAVAILABLE) }
+            var requestHealthConnectAfterSystem by remember { mutableStateOf(false) }
             val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
                 androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
             ) { grantedPermissions ->
@@ -159,8 +160,11 @@ class MainActivity : ComponentActivity() {
                         if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
                     }
                 }
-                // Health Connect is optional. On first boot, ask only when its provider is available.
-                if (!userPrefs.healthConnectFirstBootHandled) {
+                // Health Connect is optional. Request it after the system permission dialog finishes,
+                // never in the same click handler, so two ActivityResultLaunchers are never launched together.
+                val shouldRequestHealthConnect = requestHealthConnectAfterSystem || !userPrefs.healthConnectFirstBootHandled
+                requestHealthConnectAfterSystem = false
+                if (shouldRequestHealthConnect) {
                     when (healthConnectManager.availability) {
                         HealthConnectAvailability.AVAILABLE -> requestHealthConnectPermissions()
                         HealthConnectAvailability.UNAVAILABLE -> Toast.makeText(
@@ -174,7 +178,7 @@ class MainActivity : ComponentActivity() {
                             Toast.LENGTH_LONG
                         ).show()
                     }
-                    preferences.markHealthConnectFirstBootHandled()
+                    if (!userPrefs.healthConnectFirstBootHandled) preferences.markHealthConnectFirstBootHandled()
                 }
             }
             val requiredPermissions = remember {
@@ -190,10 +194,8 @@ class MainActivity : ComponentActivity() {
             // real Health Connect sheet. On first launch the launcher callback requests Health
             // Connect (so HC only appears once); on later manual requests both are launched here.
             val requestSystemHealthPermissions = {
+                requestHealthConnectAfterSystem = true
                 allPermissionsLauncher.launch(requiredPermissions)
-                if (userPrefs.healthConnectFirstBootHandled && healthConnectManager.availability == HealthConnectAvailability.AVAILABLE) {
-                    requestHealthConnectPermissions()
-                }
             }
             val permissionPromptVisible = !userPrefs.permissionPromptShown
 
