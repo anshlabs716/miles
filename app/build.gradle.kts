@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.miles.track"
     minSdk = 26
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.0.7"
+    versionCode = 4
+    versionName = "1.0.8"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
   // Release signing is optional: distro builders (F-Droid) and fresh clones have

@@ -2,6 +2,20 @@
 
 All notable changes to MILES are recorded here.
 
+## [1.0.8] - 2026-09-29
+
+### Fixed
+- Fixed a crash when scrolling to the bottom of Settings; the About card referenced an empty logo image.
+- Added a clear “Permission not granted — Open app settings” action when Health Connect access is missing.
+- Prevented the system and Health Connect permission dialogs from launching at the same time.
+- The About card now reads the real app version instead of showing an old hardcoded version.
+- The Source Code button now opens the actual MILES repository.
+
+### Changed
+- Bumped the app to version 1.0.8 (build 4).
+- Enabled R8 minification and resource shrinking for release builds, reducing the APK from roughly 23 MB to roughly 3 MB.
+- Removed the unnecessary Foojay toolchain resolver from the build configuration.
+
 ## [1.0.7] - 2026-09-25
 
 ### Fixed
