@@ -1048,7 +1048,7 @@ fun AboutMilesCard(
                 OutlinedButton(
                     onClick = {
                         try {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/anshlabs716/miles"))
                             context.startActivity(intent)
                         } catch (_: Exception) {
                             Toast.makeText(context, "No web browser found", Toast.LENGTH_SHORT).show()
