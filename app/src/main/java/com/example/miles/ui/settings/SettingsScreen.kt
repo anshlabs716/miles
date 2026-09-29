@@ -98,6 +98,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.R
 import com.example.miles.data.local.AppIconOption
 import com.example.miles.data.local.BaseThemeOption
@@ -974,7 +975,7 @@ fun AboutMilesCard(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            "v1.0.3 (Build 2) • F-Droid Release",
+                            "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
