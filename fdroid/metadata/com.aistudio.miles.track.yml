@@ -1,14 +1,15 @@
 Categories:
   - Sports & Health
   - Workout
-AuthorName: Ansh
 License: GPL-3.0-only
+AuthorName: Ansh
 SourceCode: https://github.com/anshlabs716/miles
 IssueTracker: https://github.com/anshlabs716/miles/issues
 Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
 
 Name: MILES
 AutoName: MILES
+
 RepoType: git
 Repo: https://github.com/anshlabs716/miles
 
