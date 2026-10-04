@@ -102,10 +102,10 @@ class PedometerManager(
                 .putFloat(KEY_DAY_BASELINE, -1f)
                 .apply()
             _todaySteps.value = 0
-            lastCounterValue = prefs.getFloat(KEY_LAST_COUNTER, -1f)
+            lastCounterValue = (prefs.all[KEY_LAST_COUNTER] as? Number)?.toFloat() ?: -1f
         } else {
             _todaySteps.value = prefs.getInt(KEY_TODAY_STEPS, 0).coerceAtLeast(0)
-            lastCounterValue = prefs.getFloat(KEY_LAST_COUNTER, -1f)
+            lastCounterValue = (prefs.all[KEY_LAST_COUNTER] as? Number)?.toFloat() ?: -1f
         }
 
         // Active minutes reset with the day and survive app restarts

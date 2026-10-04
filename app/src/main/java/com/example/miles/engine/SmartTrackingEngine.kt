@@ -284,7 +284,7 @@ class SmartTrackingEngine(
         val settingsPrefs = context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
         val curCal = settingsPrefs.getInt("today_workout_calories", 0)
         val curMin = settingsPrefs.getInt("today_workout_duration_min", 0)
-        val curDist = settingsPrefs.getFloat("today_workout_distance_m", 0f)
+        val curDist = (settingsPrefs.all["today_workout_distance_m"] as? Number)?.toFloat() ?: 0f
         val todayKey = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
         settingsPrefs.edit()
             .putString("today_workout_date", todayKey)
@@ -636,8 +636,8 @@ class SmartTrackingEngine(
 
     /** The user's real body weight (kg) from the existing profile setting. */
     private fun bodyWeightKg(): Double =
-        context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
-            .getFloat("user_weight_kg", 70f).toDouble()
+        (context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
+            .all["user_weight_kg"] as? Number)?.toDouble() ?: 70.0
 
     fun processStepDelta(delta: Int) {
         if (_liveStats.value.state != TrackingState.RECORDING || delta <= 0) return
