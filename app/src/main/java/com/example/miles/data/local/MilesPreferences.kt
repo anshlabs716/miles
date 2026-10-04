@@ -208,38 +208,77 @@ class MilesPreferences(context: Context) {
     private val _userPreferences = MutableStateFlow(loadPreferences())
     val userPreferences: StateFlow<UserPreferences> = _userPreferences.asStateFlow()
 
-    private fun loadPreferences(): UserPreferences {
-        val hasSetup = prefs.getBoolean("has_completed_setup", false)
-        val healthConnectFirstBootHandled = prefs.getBoolean("health_connect_first_boot_handled", false)
-        val permissionPromptShown = prefs.getBoolean("permission_prompt_shown", false)
-        val userName = prefs.getString("user_name", "") ?: ""
-        val primarySport = prefs.getString("primary_sport", "RUNNING") ?: "RUNNING"
-        val stepGoal = prefs.getInt("daily_step_goal", 8000)
-        val activeMinGoal = prefs.getInt("daily_active_min_goal", 45)
-        val calorieGoal = prefs.getInt("daily_calorie_goal", 500)
-        val weeklyDistGoal = prefs.getFloat("weekly_dist_goal", 25.0f)
+    /**
+     * Keys that are always persisted as Long. JSON has a single number type, so a Long whose value
+     * fits into an Int (every interval below does) comes back from JSON as an Integer. Reading it
+     * with [SharedPreferences.getLong] then throws, which used to abort a whole backup restore.
+     */
+    private val longPreferenceKeys = setOf(
+        "counter_interval_ms",
+        "telemetry_interval_ms",
+        "sensor_refresh_ms"
+    )
 
-        val themeStr = prefs.getString("theme", BaseThemeOption.TWILIGHT.name) ?: BaseThemeOption.TWILIGHT.name
+    /**
+     * JSON has a single number type, so a value can come back from a backup as Int, Long, or
+     * Double no matter which type it was originally stored under. Reading with [SharedPreferences]
+     * accessors then throws ClassCastException, which used to abort a backup restore. These
+     * accessors coerce whatever is actually stored.
+     */
+    private fun prefLong(key: String, default: Long): Long = prefNumber(key)?.toLong() ?: default
+
+    private fun prefFloat(key: String, default: Float): Float = prefNumber(key)?.toFloat() ?: default
+
+    private fun prefInt(key: String, default: Int): Int = prefNumber(key)?.toInt() ?: default
+
+    private fun prefNumber(key: String): Number? = when (val raw = prefs.all[key]) {
+        is Number -> raw
+        is String -> raw.trim().toDoubleOrNull()
+        else -> null
+    }
+
+    private fun prefBoolean(key: String, default: Boolean): Boolean = when (val raw = prefs.all[key]) {
+        is Boolean -> raw
+        is String -> raw.trim().toBooleanStrictOrNull() ?: default
+        is Number -> raw.toInt() != 0
+        else -> default
+    }
+
+    private fun prefString(key: String, default: String): String =
+        (prefs.all[key] as? String) ?: default
+
+    private fun loadPreferences(): UserPreferences {
+        val hasSetup = prefBoolean("has_completed_setup", false)
+        val healthConnectFirstBootHandled = prefBoolean("health_connect_first_boot_handled", false)
+        val permissionPromptShown = prefBoolean("permission_prompt_shown", false)
+        val userName = prefString("user_name", "")
+        val primarySport = prefString("primary_sport", "RUNNING")
+        val stepGoal = prefInt("daily_step_goal", 8000)
+        val activeMinGoal = prefInt("daily_active_min_goal", 45)
+        val calorieGoal = prefInt("daily_calorie_goal", 500)
+        val weeklyDistGoal = prefFloat("weekly_dist_goal", 25.0f)
+
+        val themeStr = prefString("theme", BaseThemeOption.TWILIGHT.name)
         val theme = runCatching { BaseThemeOption.valueOf(themeStr) }.getOrDefault(BaseThemeOption.TWILIGHT)
 
-        val iconStr = prefs.getString("app_icon", AppIconOption.DEFAULT.name) ?: AppIconOption.DEFAULT.name
+        val iconStr = prefString("app_icon", AppIconOption.DEFAULT.name)
         val appIcon = runCatching { AppIconOption.valueOf(iconStr) }.getOrDefault(AppIconOption.DEFAULT)
 
-        val unitStr = prefs.getString("unit", DistanceUnit.METRIC.name) ?: DistanceUnit.METRIC.name
+        val unitStr = prefString("unit", DistanceUnit.METRIC.name)
         val unit = runCatching { DistanceUnit.valueOf(unitStr) }.getOrDefault(DistanceUnit.METRIC)
 
-        val colorVisionStr = prefs.getString("color_vision", ColorVisionMode.NORMAL.name) ?: ColorVisionMode.NORMAL.name
+        val colorVisionStr = prefString("color_vision", ColorVisionMode.NORMAL.name)
         val colorVision = runCatching { ColorVisionMode.valueOf(colorVisionStr) }.getOrDefault(ColorVisionMode.NORMAL)
 
         val access = AccessibilitySettings(
-            largerText = prefs.getBoolean("acc_larger_text", false),
-            largerUi = prefs.getBoolean("acc_larger_ui", false),
-            boldText = prefs.getBoolean("acc_bold_text", false),
-            highContrast = prefs.getBoolean("acc_high_contrast", false),
-            reducedMotion = prefs.getBoolean("acc_reduced_motion", false),
-            disableAnimations = prefs.getBoolean("acc_disable_anim", false),
+            largerText = prefBoolean("acc_larger_text", false),
+            largerUi = prefBoolean("acc_larger_ui", false),
+            boldText = prefBoolean("acc_bold_text", false),
+            highContrast = prefBoolean("acc_high_contrast", false),
+            reducedMotion = prefBoolean("acc_reduced_motion", false),
+            disableAnimations = prefBoolean("acc_disable_anim", false),
             colorVisionMode = colorVision,
-            largeTouchTargets = prefs.getBoolean("acc_large_targets", false)
+            largeTouchTargets = prefBoolean("acc_large_targets", false)
         )
 
         return UserPreferences(
@@ -253,107 +292,107 @@ class MilesPreferences(context: Context) {
             dailyCaloriesGoal = calorieGoal,
             weeklyDistanceGoalKm = weeklyDistGoal,
             theme = theme,
-            liquidGlassEnabled = prefs.getBoolean("liquid_glass", true),
+            liquidGlassEnabled = prefBoolean("liquid_glass", true),
             appIcon = appIcon,
             unit = unit,
-            gamificationEnabled = prefs.getBoolean("gamification", true),
-            voiceAnnouncements = prefs.getBoolean("voice_announcements", false),
-            autoPause = prefs.getBoolean("auto_pause", true),
-            liveActivities = prefs.getBoolean("live_activities", true),
-            smartDnd = prefs.getBoolean("smart_dnd", false),
-            batterySaverTracking = prefs.getBoolean("battery_saver_tracking", false),
-            counterIntervalMs = prefs.getLong("counter_interval_ms", 100L).coerceIn(10L, 600_000L),
-            telemetryIntervalMs = prefs.getLong("telemetry_interval_ms", 3000L).coerceIn(100L, 600_000L),
+            gamificationEnabled = prefBoolean("gamification", true),
+            voiceAnnouncements = prefBoolean("voice_announcements", false),
+            autoPause = prefBoolean("auto_pause", true),
+            liveActivities = prefBoolean("live_activities", true),
+            smartDnd = prefBoolean("smart_dnd", false),
+            batterySaverTracking = prefBoolean("battery_saver_tracking", false),
+            counterIntervalMs = prefLong("counter_interval_ms", 100L).coerceIn(10L, 600_000L),
+            telemetryIntervalMs = prefLong("telemetry_interval_ms", 3000L).coerceIn(100L, 600_000L),
             accessibility = access,
 
-            userWeightKg = prefs.getFloat("user_weight_kg", 70.0f),
-            userHeightCm = prefs.getFloat("user_height_cm", 175.0f),
-            userAge = prefs.getInt("user_age", 28),
-            userGender = prefs.getString("user_gender", "UNSPECIFIED") ?: "UNSPECIFIED",
-            maxHeartRateBpm = prefs.getInt("max_hr_bpm", 190),
-            restingHeartRateBpm = prefs.getInt("resting_hr_bpm", 60),
-            lactateThresholdHrBpm = prefs.getInt("lactate_threshold_hr_bpm", 168),
-            athleteLevel = prefs.getString("athlete_level", "INTERMEDIATE") ?: "INTERMEDIATE",
+            userWeightKg = prefFloat("user_weight_kg", 70.0f),
+            userHeightCm = prefFloat("user_height_cm", 175.0f),
+            userAge = prefInt("user_age", 28),
+            userGender = prefString("user_gender", "UNSPECIFIED"),
+            maxHeartRateBpm = prefInt("max_hr_bpm", 190),
+            restingHeartRateBpm = prefInt("resting_hr_bpm", 60),
+            lactateThresholdHrBpm = prefInt("lactate_threshold_hr_bpm", 168),
+            athleteLevel = prefString("athlete_level", "INTERMEDIATE"),
 
-            audioCueIntervalKm = prefs.getFloat("audio_cue_interval_km", 1.0f),
-            audioCueVolumePercent = prefs.getInt("audio_cue_vol", 80),
-            audioSpeechRate = prefs.getFloat("audio_speech_rate", 1.0f),
-            audioAnnouncePace = prefs.getBoolean("audio_ann_pace", true),
-            audioAnnounceHeartRate = prefs.getBoolean("audio_ann_hr", true),
-            audioAnnounceDistance = prefs.getBoolean("audio_ann_dist", true),
-            audioAnnounceCadence = prefs.getBoolean("audio_ann_cad", false),
-            countdownSeconds = prefs.getInt("countdown_seconds", 3),
-            autoPauseSensitivityKmh = prefs.getFloat("auto_pause_sens", 1.5f),
-            cadenceMetronomeEnabled = prefs.getBoolean("cadence_metronome", false),
-            targetCadenceSpm = prefs.getInt("target_cadence_spm", 170),
-            hrZoneAlarmEnabled = prefs.getBoolean("hr_zone_alarm", false),
-            hrZoneAlarmBpm = prefs.getInt("hr_zone_alarm_bpm", 180),
+            audioCueIntervalKm = prefFloat("audio_cue_interval_km", 1.0f),
+            audioCueVolumePercent = prefInt("audio_cue_vol", 80),
+            audioSpeechRate = prefFloat("audio_speech_rate", 1.0f),
+            audioAnnouncePace = prefBoolean("audio_ann_pace", true),
+            audioAnnounceHeartRate = prefBoolean("audio_ann_hr", true),
+            audioAnnounceDistance = prefBoolean("audio_ann_dist", true),
+            audioAnnounceCadence = prefBoolean("audio_ann_cad", false),
+            countdownSeconds = prefInt("countdown_seconds", 3),
+            autoPauseSensitivityKmh = prefFloat("auto_pause_sens", 1.5f),
+            cadenceMetronomeEnabled = prefBoolean("cadence_metronome", false),
+            targetCadenceSpm = prefInt("target_cadence_spm", 170),
+            hrZoneAlarmEnabled = prefBoolean("hr_zone_alarm", false),
+            hrZoneAlarmBpm = prefInt("hr_zone_alarm_bpm", 180),
 
-            defaultMapLayer = prefs.getString("default_map_layer", "OPEN_STREET_MAP") ?: "OPEN_STREET_MAP",
-            mapAutoFollow = prefs.getBoolean("map_auto_follow", true),
-            mapKeepScreenOn = prefs.getBoolean("map_keep_screen_on", true),
-            mapPolylineColorMode = prefs.getString("map_polyline_color", "SPEED_GRADIENT") ?: "SPEED_GRADIENT",
-            mapPolylineStrokeWidthDp = prefs.getInt("map_polyline_stroke", 5),
-            mapHeadingRotationMode = prefs.getString("map_heading_mode", "NORTH_UP") ?: "NORTH_UP",
-            ghostPacerMode = prefs.getString("ghost_pacer_mode", "PERSONAL_RECORD") ?: "PERSONAL_RECORD",
-            targetPaceSecPerKm = prefs.getFloat("target_pace_sec_km", 330.0f).toDouble(),
-            onlineWeatherEnabled = prefs.getBoolean("online_weather_enabled", false),
+            defaultMapLayer = prefString("default_map_layer", "OPEN_STREET_MAP"),
+            mapAutoFollow = prefBoolean("map_auto_follow", true),
+            mapKeepScreenOn = prefBoolean("map_keep_screen_on", true),
+            mapPolylineColorMode = prefString("map_polyline_color", "SPEED_GRADIENT"),
+            mapPolylineStrokeWidthDp = prefInt("map_polyline_stroke", 5),
+            mapHeadingRotationMode = prefString("map_heading_mode", "NORTH_UP"),
+            ghostPacerMode = prefString("ghost_pacer_mode", "PERSONAL_RECORD"),
+            targetPaceSecPerKm = prefFloat("target_pace_sec_km", 330.0f).toDouble(),
+            onlineWeatherEnabled = prefBoolean("online_weather_enabled", false),
 
-            devModeUnlocked = prefs.getBoolean("dev_mode_unlocked", true),
-            mockGpsEnabled = prefs.getBoolean("mock_gps_enabled", false),
-            mockGpsLat = prefs.getFloat("mock_gps_lat", 37.7749f).toDouble(),
-            mockGpsLon = prefs.getFloat("mock_gps_lon", -122.4194f).toDouble(),
-            mockHeartRateBpm = prefs.getInt("mock_hr_bpm", 0),
-            minGpsAccuracyFilterMeters = prefs.getFloat("min_gps_acc_filter", 25.0f),
-            verboseLogging = prefs.getBoolean("verbose_logging", false),
-            gpsProviderMode = prefs.getString("gps_provider_mode", "HARDWARE_GPS") ?: "HARDWARE_GPS",
+            devModeUnlocked = prefBoolean("dev_mode_unlocked", true),
+            mockGpsEnabled = prefBoolean("mock_gps_enabled", false),
+            mockGpsLat = prefFloat("mock_gps_lat", 37.7749f).toDouble(),
+            mockGpsLon = prefFloat("mock_gps_lon", -122.4194f).toDouble(),
+            mockHeartRateBpm = prefInt("mock_hr_bpm", 0),
+            minGpsAccuracyFilterMeters = prefFloat("min_gps_acc_filter", 25.0f),
+            verboseLogging = prefBoolean("verbose_logging", false),
+            gpsProviderMode = prefString("gps_provider_mode", "HARDWARE_GPS"),
 
-            kalmanProcessNoiseQ = prefs.getFloat("kalman_q", 0.005f),
-            kalmanMeasurementNoiseR = prefs.getFloat("kalman_r", 6.0f),
-            minHeadingSpeedMps = prefs.getFloat("min_heading_speed", 0.8f),
-            maxHdopThreshold = prefs.getFloat("max_hdop", 4.0f),
-            gnssGpsEnabled = prefs.getBoolean("gnss_gps", true),
-            gnssGlonassEnabled = prefs.getBoolean("gnss_glonass", true),
-            gnssGalileoEnabled = prefs.getBoolean("gnss_galileo", true),
-            gnssBeidouEnabled = prefs.getBoolean("gnss_beidou", true),
-            gnssQzssEnabled = prefs.getBoolean("gnss_qzss", true),
-            gnssSbasEnabled = prefs.getBoolean("gnss_sbas", true),
-            deadReckoningDurationSec = prefs.getInt("dead_reckoning_sec", 10),
-            multipathFilterEnabled = prefs.getBoolean("multipath_filter", true),
-            nmeaLoggingEnabled = prefs.getBoolean("nmea_logging", false),
+            kalmanProcessNoiseQ = prefFloat("kalman_q", 0.005f),
+            kalmanMeasurementNoiseR = prefFloat("kalman_r", 6.0f),
+            minHeadingSpeedMps = prefFloat("min_heading_speed", 0.8f),
+            maxHdopThreshold = prefFloat("max_hdop", 4.0f),
+            gnssGpsEnabled = prefBoolean("gnss_gps", true),
+            gnssGlonassEnabled = prefBoolean("gnss_glonass", true),
+            gnssGalileoEnabled = prefBoolean("gnss_galileo", true),
+            gnssBeidouEnabled = prefBoolean("gnss_beidou", true),
+            gnssQzssEnabled = prefBoolean("gnss_qzss", true),
+            gnssSbasEnabled = prefBoolean("gnss_sbas", true),
+            deadReckoningDurationSec = prefInt("dead_reckoning_sec", 10),
+            multipathFilterEnabled = prefBoolean("multipath_filter", true),
+            nmeaLoggingEnabled = prefBoolean("nmea_logging", false),
 
-            runningPowerEnabled = prefs.getBoolean("running_power_en", true),
-            dragCoefficientCdA = prefs.getFloat("drag_cda", 0.24f),
-            airDensityRho = prefs.getFloat("air_rho", 1.225f),
-            windSpeedKmh = prefs.getFloat("wind_kmh", 0.0f),
-            gapAlgorithm = prefs.getString("gap_algo", "MINETTI_2002") ?: "MINETTI_2002",
-            groundContactTimeMs = prefs.getInt("gct_ms", 240),
-            verticalOscillationCm = prefs.getFloat("vert_osc_cm", 8.5f),
-            vdotModel = prefs.getString("vdot_model", "JACK_DANIELS") ?: "JACK_DANIELS",
-            trimpModel = prefs.getString("trimp_model", "BANNISTER_EXPONENTIAL") ?: "BANNISTER_EXPONENTIAL",
-            stepSensitivityThreshold = prefs.getFloat("step_sens", 1.2f),
-            barometerQnhHpa = prefs.getFloat("baro_qnh", 1013.25f),
+            runningPowerEnabled = prefBoolean("running_power_en", true),
+            dragCoefficientCdA = prefFloat("drag_cda", 0.24f),
+            airDensityRho = prefFloat("air_rho", 1.225f),
+            windSpeedKmh = prefFloat("wind_kmh", 0.0f),
+            gapAlgorithm = prefString("gap_algo", "MINETTI_2002"),
+            groundContactTimeMs = prefInt("gct_ms", 240),
+            verticalOscillationCm = prefFloat("vert_osc_cm", 8.5f),
+            vdotModel = prefString("vdot_model", "JACK_DANIELS"),
+            trimpModel = prefString("trimp_model", "BANNISTER_EXPONENTIAL"),
+            stepSensitivityThreshold = prefFloat("step_sens", 1.2f),
+            barometerQnhHpa = prefFloat("baro_qnh", 1013.25f),
 
-            petType = runCatching { PetType.valueOf(prefs.getString("pet_type", PetType.DOG.name) ?: PetType.DOG.name) }.getOrDefault(PetType.DOG),
-            petName = prefs.getString("pet_name", "Barkley") ?: "Barkley",
+            petType = runCatching { PetType.valueOf(prefString("pet_type", PetType.DOG.name)) }.getOrDefault(PetType.DOG),
+            petName = prefString("pet_name", "Barkley"),
 
-            isTodayLazyDay = prefs.getBoolean("is_today_lazy", false),
-            lazyDaysThisWeek = prefs.getInt("lazy_days_week", 0),
-            maxLazyDaysPerWeek = prefs.getInt("max_lazy_days", 3),
-            lastLazyDayDate = prefs.getString("last_lazy_date", "") ?: "",
+            isTodayLazyDay = prefBoolean("is_today_lazy", false),
+            lazyDaysThisWeek = prefInt("lazy_days_week", 0),
+            maxLazyDaysPerWeek = prefInt("max_lazy_days", 3),
+            lastLazyDayDate = prefString("last_lazy_date", ""),
 
             trackingSourceMode = runCatching {
-                TrackingSourceMode.valueOf(prefs.getString("tracking_source_mode", TrackingSourceMode.ALL.name) ?: TrackingSourceMode.ALL.name)
+                TrackingSourceMode.valueOf(prefString("tracking_source_mode", TrackingSourceMode.ALL.name))
             }.getOrDefault(TrackingSourceMode.ALL),
-            gpsSensorEnabled = prefs.getBoolean("gps_sensor_en", true),
-            stepSensorHardwareEnabled = prefs.getBoolean("step_sensor_hw_en", true),
-            bluetoothTunnelingEnabled = prefs.getBoolean("bt_tunnel_en", true),
-            heartRateSensorEnabled = prefs.getBoolean("hr_sensor_en", true),
-            sensorRefreshRateMs = prefs.getLong("sensor_refresh_ms", 1000L),
+            gpsSensorEnabled = prefBoolean("gps_sensor_en", true),
+            stepSensorHardwareEnabled = prefBoolean("step_sensor_hw_en", true),
+            bluetoothTunnelingEnabled = prefBoolean("bt_tunnel_en", true),
+            heartRateSensorEnabled = prefBoolean("hr_sensor_en", true),
+            sensorRefreshRateMs = prefLong("sensor_refresh_ms", 1000L),
 
-            moveReminderEnabled = prefs.getBoolean("move_rem_en", true),
-            moveReminderIntervalMinutes = prefs.getInt("move_rem_int", 45),
-            moveReminderCustomText = prefs.getString("move_rem_text", "Time to stretch and get moving! Take 250 steps.") ?: "Time to stretch and get moving! Take 250 steps."
+            moveReminderEnabled = prefBoolean("move_rem_en", true),
+            moveReminderIntervalMinutes = prefInt("move_rem_int", 45),
+            moveReminderCustomText = prefString("move_rem_text", "Time to stretch and get moving! Take 250 steps.")
         )
     }
 
@@ -715,13 +754,19 @@ class MilesPreferences(context: Context) {
         val keys = values.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            when (val value = values.get(key)) {
-                is Boolean -> editor.putBoolean(key, value)
-                is Int -> editor.putInt(key, value)
-                is Long -> editor.putLong(key, value)
-                is Double -> editor.putFloat(key, value.toFloat())
-                is Float -> editor.putFloat(key, value)
-                is String -> editor.putString(key, value)
+            val value = runCatching { values.get(key) }.getOrNull()
+            when {
+                key in longPreferenceKeys && value is Number -> editor.putLong(key, value.toLong())
+                value is Boolean -> editor.putBoolean(key, value)
+                value is String -> editor.putString(key, value)
+                // JSON collapses Int/Long/Float/Double, so restore each numeric as the widest
+                // lossless type: floats keep fractional precision, large ints stay exact.
+                value is Double -> editor.putFloat(key, value.toFloat())
+                value is Float -> editor.putFloat(key, value)
+                value is Long -> editor.putLong(key, value)
+                value is Int -> editor.putInt(key, value)
+                value is Number -> editor.putLong(key, value.toLong())
+                value == null -> Unit
                 else -> editor.putString(key, value.toString())
             }
         }

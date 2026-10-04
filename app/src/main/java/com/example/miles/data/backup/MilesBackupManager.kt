@@ -40,9 +40,19 @@ class MilesBackupManager(
     suspend fun exportCsv(): String = withContext(Dispatchers.IO) {
         val activities = database.activityDao().getAllActivitiesOnce()
         buildString {
-            appendLine("ID,Title,ActivityType,StartTime,EndTime,DurationSeconds,DistanceMeters,Steps,AvgPaceSecPerKm,BestPaceSecPerKm,AvgSpeedKmh,MaxSpeedKmh,ElevationGainM,ElevationLossM,Calories,AvgHeartRate,MaxHeartRate,Notes,SensorSource")
+            // Columns match the names importFromCsv() looks up, so a CSV exported here re-imports
+            // without losing the track, waypoints, favourite flag, or any numeric field.
+            appendLine("ID,Title,ActivityType,StartTime,EndTime,DurationSeconds,DistanceMeters,Steps,AvgPaceSecPerKm,BestPaceSecPerKm,AvgSpeedKmh,MaxSpeedKmh,ElevationGainM,ElevationLossM,Calories,AvgHeartRate,MaxHeartRate,RoutePointsJson,WaypointsJson,Notes,SensorSource,IsFavorite,Version")
             activities.forEach { a ->
-                appendLine(listOf(a.id, a.title, a.activityType, a.startTime, a.endTime, a.durationSeconds, a.distanceMeters, a.steps, a.avgPaceSecPerKm, a.bestPaceSecPerKm, a.avgSpeedKmh, a.maxSpeedKmh, a.elevationGainM, a.elevationLossM, a.calories, a.avgHeartRate, a.maxHeartRate, a.notes, a.sensorSource).joinToString(",") { csvEscape(it.toString()) })
+                appendLine(
+                    listOf(
+                        a.id, a.title, a.activityType, a.startTime, a.endTime, a.durationSeconds,
+                        a.distanceMeters, a.steps, a.avgPaceSecPerKm, a.bestPaceSecPerKm, a.avgSpeedKmh,
+                        a.maxSpeedKmh, a.elevationGainM, a.elevationLossM, a.calories, a.avgHeartRate,
+                        a.maxHeartRate, a.routePointsJson, a.waypointsJson, a.notes, a.sensorSource,
+                        a.isFavorite, a.version
+                    ).joinToString(",") { csvEscape(it.toString()) }
+                )
             }
         }
     }
@@ -50,7 +60,9 @@ class MilesBackupManager(
     suspend fun exportGpx(): String = withContext(Dispatchers.IO) {
         val activities = database.activityDao().getAllActivitiesOnce()
         val zones = database.privacyZoneDao().getAllZonesOnce()
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         buildString {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             appendLine("""<gpx version="1.1" creator="MILES" xmlns="http://www.topografix.com/GPX/1/1">""")
@@ -76,7 +88,9 @@ class MilesBackupManager(
     suspend fun exportTcx(): String = withContext(Dispatchers.IO) {
         val activities = database.activityDao().getAllActivitiesOnce()
         val zones = database.privacyZoneDao().getAllZonesOnce()
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         buildString {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             appendLine("""<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">""")
@@ -122,15 +136,33 @@ class MilesBackupManager(
         val root = JSONObject(content)
         require(root.optString("header") == "MILES_BACKUP_V1") { "Not a valid MILES backup" }
         require(root.optInt("version", -1) == 1) { "Unsupported MILES backup version" }
+        // Preferences first: a malformed preference must not wipe the activity data.
         preferences.importRawPreferences(root.optJSONObject("preferences") ?: JSONObject())
+        // Every entry is parsed before the tables are touched, so one unreadable record cannot leave the
+        // database half-cleared.
+        val activities = root.optJSONArray("activities")?.let { a ->
+            (0 until a.length()).mapNotNull { i ->
+                runCatching { activityFromJson(a.getJSONObject(i)) }.getOrNull()
+            }
+        } ?: emptyList()
+        val routes = root.optJSONArray("savedRoutes")?.let { a ->
+            (0 until a.length()).mapNotNull { i -> runCatching { routeFromJson(a.getJSONObject(i)) }.getOrNull() }
+        } ?: emptyList()
+        val zones = root.optJSONArray("privacyZones")?.let { a ->
+            (0 until a.length()).mapNotNull { i -> runCatching { zoneFromJson(a.getJSONObject(i)) }.getOrNull() }
+        } ?: emptyList()
+        val goals = root.optJSONArray("goals")?.let { a ->
+            (0 until a.length()).mapNotNull { i -> runCatching { goalFromJson(a.getJSONObject(i)) }.getOrNull() }
+        } ?: emptyList()
+
         database.activityDao().clearAll()
         database.savedRouteDao().clearAll()
         database.privacyZoneDao().clearAll()
         database.goalDao().clearAll()
-        root.optJSONArray("activities")?.let { a -> database.activityDao().insertActivities((0 until a.length()).map { activityFromJson(a.getJSONObject(it)) }) }
-        root.optJSONArray("savedRoutes")?.let { a -> (0 until a.length()).forEach { database.savedRouteDao().insertRoute(routeFromJson(a.getJSONObject(it))) } }
-        root.optJSONArray("privacyZones")?.let { a -> (0 until a.length()).forEach { database.privacyZoneDao().insertZone(zoneFromJson(a.getJSONObject(it))) } }
-        root.optJSONArray("goals")?.let { a -> (0 until a.length()).forEach { database.goalDao().insertGoal(goalFromJson(a.getJSONObject(it))) } }
+        database.activityDao().insertActivities(activities)
+        routes.forEach { database.savedRouteDao().insertRoute(it) }
+        zones.forEach { database.privacyZoneDao().insertZone(it) }
+        goals.forEach { database.goalDao().insertGoal(it) }
     }
 
     private fun activityToJson(a: ActivityEntity) = JSONObject().apply {
@@ -145,12 +177,11 @@ class MilesBackupManager(
     private fun activityFromJson(o: JSONObject): ActivityEntity {
         val rawPoints = o.opt("routePointsJson") ?: o.opt("points") ?: o.opt("routePoints") ?: o.opt("track") ?: o.opt("coordinates")
         val pointsList = if (rawPoints != null) MilesRepository.parsePoints(rawPoints.toString()) else emptyList()
-        val normalizedPointsJson = MilesRepository.pointsToJson(pointsList)
 
         val rawWaypoints = o.opt("waypointsJson") ?: o.opt("waypoints")
         val waypointsList = if (rawWaypoints != null) MilesRepository.parseWaypoints(rawWaypoints.toString()) else emptyList()
-        val normalizedWaypointsJson = MilesRepository.waypointsToJson(waypointsList)
 
+        // A recorded distance always wins; only fill it in from the track when it is missing.
         var distance = o.optDouble("distanceMeters", o.optDouble("distanceKm", 0.0) * 1000.0)
         if (distance <= 0.0 && pointsList.size >= 2) {
             var sumDist = 0.0
@@ -163,34 +194,37 @@ class MilesBackupManager(
             distance = sumDist
         }
 
+        val durationSeconds = o.optLong("durationSeconds", 0L)
+
         return ActivityEntity(
-            id = o.optString("id", java.util.UUID.randomUUID().toString()),
-            title = o.optString("title", "Workout"),
-            activityType = o.optString("activityType", "WALKING"),
+            id = o.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
+            title = o.optString("title").ifBlank { "Workout" },
+            activityType = o.optString("activityType").ifBlank { "WALKING" },
             startTime = o.optLong("startTime", System.currentTimeMillis()),
-            endTime = o.optLong("endTime", System.currentTimeMillis()),
-            durationSeconds = o.optLong("durationSeconds", 0L),
+            endTime = o.optLong("endTime", o.optLong("startTime", System.currentTimeMillis()) + durationSeconds * 1000L),
+            durationSeconds = durationSeconds,
             distanceMeters = distance,
-            steps = o.optInt("steps", (distance * 1.3).toInt()),
+            // Only estimate steps/calories when the backup has none, so recorded values survive.
+            steps = if (o.has("steps")) o.optInt("steps", 0) else (distance * 1.3).toInt(),
             avgPaceSecPerKm = o.optDouble("avgPaceSecPerKm", 0.0),
             bestPaceSecPerKm = o.optDouble("bestPaceSecPerKm", 0.0),
             avgSpeedKmh = o.optDouble("avgSpeedKmh", 0.0),
             maxSpeedKmh = o.optDouble("maxSpeedKmh", 0.0),
             elevationGainM = o.optDouble("elevationGainM", 0.0),
             elevationLossM = o.optDouble("elevationLossM", 0.0),
-            calories = o.optInt("calories", (distance / 1000.0 * 65.0).toInt()),
+            calories = if (o.has("calories")) o.optInt("calories", 0) else (distance / 1000.0 * 65.0).toInt(),
             avgHeartRate = o.optInt("avgHeartRate", 0),
             maxHeartRate = o.optInt("maxHeartRate", 0),
-            routePointsJson = normalizedPointsJson,
-            waypointsJson = normalizedWaypointsJson,
+            routePointsJson = MilesRepository.pointsToJson(pointsList),
+            waypointsJson = MilesRepository.waypointsToJson(waypointsList),
             weatherJson = o.optString("weatherJson", ""),
             notes = o.optString("notes", ""),
-            photoUri = if (o.isNull("photoUri")) null else o.optString("photoUri"),
+            photoUri = if (o.isNull("photoUri")) null else o.optString("photoUri").takeIf { it.isNotBlank() },
             isFavorite = o.optBoolean("isFavorite", false),
             isDeleted = o.optBoolean("isDeleted", false),
             deletedAt = if (o.isNull("deletedAt")) null else o.optLong("deletedAt"),
             version = o.optInt("version", 1),
-            sensorSource = o.optString("sensorSource", "Built-in GPS")
+            sensorSource = o.optString("sensorSource").ifBlank { "Built-in GPS" }
         )
     }
 
@@ -203,11 +237,9 @@ class MilesBackupManager(
     private fun routeFromJson(o: JSONObject): SavedRouteEntity {
         val rawPoints = o.opt("routePointsJson") ?: o.opt("points") ?: o.opt("routePoints")
         val pointsList = if (rawPoints != null) MilesRepository.parsePoints(rawPoints.toString()) else emptyList()
-        val normalizedPointsJson = MilesRepository.pointsToJson(pointsList)
 
         val rawWaypoints = o.opt("waypointsJson") ?: o.opt("waypoints")
         val waypointsList = if (rawWaypoints != null) MilesRepository.parseWaypoints(rawWaypoints.toString()) else emptyList()
-        val normalizedWaypointsJson = MilesRepository.waypointsToJson(waypointsList)
 
         var distance = o.optDouble("distanceMeters", 0.0)
         if (distance <= 0.0 && pointsList.size >= 2) {
@@ -221,16 +253,17 @@ class MilesBackupManager(
             distance = sumDist
         }
 
+        val title = o.optString("title").ifBlank { o.optString("name").ifBlank { "Saved Route" } }
         return SavedRouteEntity(
-            id = o.optString("id", java.util.UUID.randomUUID().toString()),
-            title = o.optString("title", o.optString("name", "Saved Route")),
-            name = o.optString("name", o.optString("title", "Saved Route")),
+            id = o.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
+            title = title,
+            name = o.optString("name").ifBlank { title },
             description = o.optString("description", ""),
-            activityType = o.optString("activityType", "WALKING"),
+            activityType = o.optString("activityType").ifBlank { "WALKING" },
             distanceMeters = distance,
             elevationGainM = o.optDouble("elevationGainM", 0.0),
-            routePointsJson = normalizedPointsJson,
-            waypointsJson = normalizedWaypointsJson,
+            routePointsJson = MilesRepository.pointsToJson(pointsList),
+            waypointsJson = MilesRepository.waypointsToJson(waypointsList),
             isFavorite = o.optBoolean("isFavorite", false),
             createdAt = o.optLong("createdAt", System.currentTimeMillis())
         )
@@ -240,9 +273,14 @@ class MilesBackupManager(
         put("id", z.id); put("name", z.name); put("latitude", z.latitude); put("longitude", z.longitude); put("radiusMeters", z.radiusMeters); put("isEnabled", z.isEnabled)
     }
 
+    // A malformed zone or goal must not abort the whole restore, so defaults fill the gaps.
     private fun zoneFromJson(o: JSONObject) = PrivacyZoneEntity(
-        id = o.getString("id"), name = o.optString("name"), latitude = o.getDouble("latitude"), longitude = o.getDouble("longitude"),
-        radiusMeters = o.optDouble("radiusMeters", 250.0).toFloat(), isEnabled = o.optBoolean("isEnabled", true)
+        id = o.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
+        name = o.optString("name", "Zone"),
+        latitude = o.optDouble("latitude", 0.0),
+        longitude = o.optDouble("longitude", 0.0),
+        radiusMeters = o.optDouble("radiusMeters", 250.0).toFloat(),
+        isEnabled = o.optBoolean("isEnabled", true)
     )
 
     private fun goalToJson(g: GoalEntity) = JSONObject().apply {
@@ -250,7 +288,11 @@ class MilesBackupManager(
     }
 
     private fun goalFromJson(o: JSONObject) = GoalEntity(
-        id = o.getString("id"), type = o.optString("type"), targetValue = o.optDouble("targetValue"), period = o.optString("period", "DAILY"), createdAt = o.optLong("createdAt")
+        id = o.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
+        type = o.optString("type", "STEPS"),
+        targetValue = o.optDouble("targetValue", 0.0),
+        period = o.optString("period", "DAILY"),
+        createdAt = o.optLong("createdAt", System.currentTimeMillis())
     )
 
     private fun filterPrivacy(points: List<GpsPoint>, zones: List<PrivacyZoneEntity>): List<GpsPoint> =

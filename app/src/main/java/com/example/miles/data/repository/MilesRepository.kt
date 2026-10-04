@@ -25,6 +25,7 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
@@ -81,83 +82,161 @@ class MilesRepository(
     companion object {
         fun parsePoints(json: String): List<GpsPoint> {
             if (json.isBlank() || json == "[]") return emptyList()
-            return runCatching {
-                var cleanJson = json.trim()
-                if (cleanJson.startsWith("\"") && cleanJson.endsWith("\"")) {
-                    cleanJson = cleanJson.substring(1, cleanJson.length - 1).replace("\\\"", "\"")
+            val cleanJson = json.trim().let {
+                if (it.length > 1 && it.startsWith("\"") && it.endsWith("\"") && !it.startsWith("\"{")) {
+                    it.substring(1, it.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+                } else {
+                    it
                 }
-                val array = JSONArray(cleanJson)
-                val list = mutableListOf<GpsPoint>()
-                for (i in 0 until array.length()) {
-                    val item = array.get(i)
-                    if (item is JSONObject) {
-                        val lat = when {
-                            item.has("lat") -> item.getDouble("lat")
-                            item.has("latitude") -> item.getDouble("latitude")
-                            else -> continue
-                        }
-                        val lng = when {
-                            item.has("lng") -> item.getDouble("lng")
-                            item.has("lon") -> item.getDouble("lon")
-                            item.has("longitude") -> item.getDouble("longitude")
-                            else -> continue
-                        }
-                        val alt = when {
-                            item.has("alt") -> item.optDouble("alt", 0.0)
-                            item.has("ele") -> item.optDouble("ele", 0.0)
-                            item.has("altitude") -> item.optDouble("altitude", 0.0)
-                            item.has("elevation") -> item.optDouble("elevation", 0.0)
-                            else -> 0.0
-                        }
-                        val acc = when {
-                            item.has("acc") -> item.optDouble("acc", 0.0).toFloat()
-                            item.has("accuracy") -> item.optDouble("accuracy", 0.0).toFloat()
-                            else -> 3.0f
-                        }
-                        val spd = when {
-                            item.has("spd") -> item.optDouble("spd", 0.0).toFloat()
-                            item.has("speed") -> item.optDouble("speed", 0.0).toFloat()
-                            else -> 0.0f
-                        }
-                        val brg = when {
-                            item.has("brg") -> item.optDouble("brg", 0.0).toFloat()
-                            item.has("bearing") -> item.optDouble("bearing", 0.0).toFloat()
-                            item.has("heading") -> item.optDouble("heading", 0.0).toFloat()
-                            else -> 0.0f
-                        }
-                        val ts = when {
-                            item.has("ts") -> item.optLong("ts", 0L)
-                            item.has("time") -> item.optLong("time", 0L)
-                            item.has("timestamp") -> item.optLong("timestamp", 0L)
-                            else -> 0L
-                        }
-                        list.add(GpsPoint(
-                            latitude = lat,
-                            longitude = lng,
-                            altitude = alt,
-                            accuracy = acc,
-                            speed = spd,
-                            bearing = brg,
-                            timestamp = ts
-                        ))
-                    } else if (item is JSONArray) {
-                        // GeoJSON style [lon, lat, alt?]
-                        if (item.length() >= 2) {
-                            val lon = item.getDouble(0)
-                            val lat = item.getDouble(1)
-                            val alt = if (item.length() >= 3) item.getDouble(2) else 0.0
-                            list.add(GpsPoint(
-                                latitude = lat,
-                                longitude = lon,
-                                altitude = alt,
-                                accuracy = 3.0f,
-                                timestamp = System.currentTimeMillis() + (i * 1000L)
-                            ))
-                        }
+            }
+            val array = runCatching { JSONArray(cleanJson) }.getOrNull() ?: return emptyList()
+            val list = mutableListOf<GpsPoint>()
+            val fallbackStart = System.currentTimeMillis()
+            for (i in 0 until array.length()) {
+                // One malformed entry must not discard the whole track: parse each item
+                // independently and skip only the entries that cannot be read.
+                val item = runCatching { array.opt(i) }.getOrNull() ?: continue
+                val point = runCatching {
+                    when (item) {
+                        is JSONObject -> parsePointObject(item, fallbackStart + (i * 1000L))
+                        is JSONArray -> parsePointArray(item, fallbackStart + (i * 1000L))
+                        else -> null
+                    }
+                }.getOrNull()
+                if (point != null && isPlausibleCoordinate(point.latitude, point.longitude)) {
+                    list.add(point)
+                }
+            }
+            return list
+        }
+
+        /** Drops the classic (0, 0) null-island fix plus out-of-range values. */
+        private fun isPlausibleCoordinate(lat: Double, lng: Double): Boolean {
+            if (!lat.isFinite() || !lng.isFinite()) return false
+            if (lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) return false
+            return !(lat == 0.0 && lng == 0.0)
+        }
+
+        private fun parsePointObject(item: JSONObject, fallbackTimestamp: Long): GpsPoint? {
+            val lat = jsonDouble(item, "lat", "latitude", "y") ?: return null
+            val lng = jsonDouble(item, "lng", "lon", "long", "longitude", "x") ?: return null
+            val alt = jsonDouble(item, "alt", "ele", "altitude", "elevation") ?: 0.0
+            val acc = jsonDouble(item, "acc", "accuracy", "horizontalAccuracy")?.toFloat() ?: 3.0f
+            val spd = jsonDouble(item, "spd", "speed")?.toFloat() ?: 0.0f
+            val brg = jsonDouble(item, "brg", "bearing", "heading")?.toFloat() ?: 0.0f
+            val ts = jsonTimestamp(item, "ts", "time", "timestamp", "t") ?: fallbackTimestamp
+            return GpsPoint(
+                latitude = lat,
+                longitude = lng,
+                altitude = alt,
+                accuracy = acc,
+                speed = spd,
+                bearing = brg,
+                timestamp = ts
+            )
+        }
+
+        /** GeoJSON style coordinate pair: [lon, lat, alt?] or [lon, lat, alt?, ts?]. */
+        private fun parsePointArray(item: JSONArray, fallbackTimestamp: Long): GpsPoint? {
+            if (item.length() < 2) return null
+            val lon = item.optDoubleOrNull(0) ?: return null
+            val lat = item.optDoubleOrNull(1) ?: return null
+            val alt = if (item.length() >= 3) item.optDoubleOrNull(2) ?: 0.0 else 0.0
+            val ts = if (item.length() >= 4) item.optLongOrNull(3) ?: fallbackTimestamp else fallbackTimestamp
+            return GpsPoint(
+                latitude = lat,
+                longitude = lon,
+                altitude = alt,
+                accuracy = 3.0f,
+                timestamp = ts
+            )
+        }
+
+        /** Returns the first key that holds a readable, finite double. */
+        private fun jsonDouble(obj: JSONObject, vararg keys: String): Double? {
+            for (key in keys) {
+                if (!obj.has(key) || obj.isNull(key)) continue
+                val raw = runCatching { obj.opt(key) }.getOrNull() ?: continue
+                val value = when (raw) {
+                    is Number -> raw.toDouble()
+                    is String -> raw.trim().toDoubleOrNull()
+                    else -> continue
+                }
+                if (value != null && value.isFinite()) return value
+            }
+            return null
+        }
+
+        /** Epoch millis from a numeric field, or millis parsed from an ISO-8601 string. */
+        private fun jsonTimestamp(obj: JSONObject, vararg keys: String): Long? {
+            for (key in keys) {
+                if (!obj.has(key) || obj.isNull(key)) continue
+                val raw = runCatching { obj.opt(key) }.getOrNull() ?: continue
+                when (raw) {
+                    is Number -> return raw.toLong()
+                    is String -> {
+                        parseTimestamp(raw)?.let { return it }
+                        raw.trim().toLongOrNull()?.let { return it }
                     }
                 }
-                list
-            }.getOrDefault(emptyList())
+            }
+            return null
+        }
+
+        private fun JSONArray.optDoubleOrNull(index: Int): Double? {
+            if (index < 0 || index >= length()) return null
+            val raw = runCatching { opt(index) }.getOrNull() ?: return null
+            return when (raw) {
+                is Number -> raw.toDouble().takeIf { it.isFinite() }
+                is String -> raw.trim().toDoubleOrNull()?.takeIf { it.isFinite() }
+                else -> null
+            }
+        }
+
+        private fun JSONArray.optLongOrNull(index: Int): Long? {
+            if (index < 0 || index >= length()) return null
+            val raw = runCatching { opt(index) }.getOrNull() ?: return null
+            return when (raw) {
+                is Number -> raw.toLong()
+                is String -> raw.trim().toLongOrNull()
+                else -> null
+            }
+        }
+
+        /**
+         * Accepts epoch millis, epoch seconds, and the ISO-8601 shapes produced by GPX/TCX/KML
+         * exports. Zone-less values are read as UTC so exports round-trip to the same instant.
+         */
+        fun parseTimestamp(value: String): Long? {
+            val text = value.trim()
+            if (text.isEmpty()) return null
+            text.toLongOrNull()?.let { return normalizeEpoch(it) }
+            text.toDoubleOrNull()?.let { return normalizeEpoch(it.toLong()) }
+
+            val normalized = text.replace('T', ' ').trim()
+            val patterns = listOf(
+                "yyyy-MM-dd HH:mm:ss.SSS",
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyy-MM-dd HH:mm",
+                "yyyy/MM/dd HH:mm:ss",
+                "yyyy-MM-dd"
+            )
+            for (pattern in patterns) {
+                val parsed = runCatching {
+                    SimpleDateFormat(pattern, Locale.US).apply {
+                        isLenient = false
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.parse(normalized)
+                }.getOrNull()
+                if (parsed != null) return parsed.time
+            }
+            return null
+        }
+
+        private fun normalizeEpoch(value: Long): Long = when {
+            value <= 0L -> value
+            value < 100_000_000_000L -> value * 1000L // seconds
+            else -> value
         }
 
         fun pointsToJson(points: List<GpsPoint>): String {
@@ -173,32 +252,35 @@ class MilesRepository(
 
         fun parseWaypoints(json: String): List<Waypoint> {
             if (json.isBlank() || json == "[]") return emptyList()
-            return runCatching {
-                var cleanJson = json.trim()
-                if (cleanJson.startsWith("\"") && cleanJson.endsWith("\"")) {
-                    cleanJson = cleanJson.substring(1, cleanJson.length - 1).replace("\\\"", "\"")
+            val cleanJson = json.trim().let {
+                if (it.length > 1 && it.startsWith("\"") && it.endsWith("\"") && !it.startsWith("\"{")) {
+                    it.substring(1, it.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+                } else {
+                    it
                 }
-                val array = JSONArray(cleanJson)
-                val list = mutableListOf<Waypoint>()
-                for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    val name = obj.optString("name", obj.optString("title", "Pin ${i + 1}"))
-                    val lat = obj.optDouble("lat", obj.optDouble("latitude", 0.0))
-                    val lng = obj.optDouble("lng", obj.optDouble("lon", obj.optDouble("longitude", 0.0)))
-                    val typeStr = obj.optString("type", WaypointType.CUSTOM.name)
-                    val type = runCatching { WaypointType.valueOf(typeStr) }.getOrDefault(WaypointType.CUSTOM)
-                    list.add(Waypoint(
-                        id = obj.optString("id", UUID.randomUUID().toString()),
-                        name = name,
-                        latitude = lat,
-                        longitude = lng,
-                        type = type,
-                        notes = obj.optString("notes", ""),
-                        timestamp = obj.optLong("ts", obj.optLong("timestamp", System.currentTimeMillis()))
-                    ))
-                }
-                list
-            }.getOrDefault(emptyList())
+            }
+            val array = runCatching { JSONArray(cleanJson) }.getOrNull() ?: return emptyList()
+            val list = mutableListOf<Waypoint>()
+            for (i in 0 until array.length()) {
+                // Skip only the unreadable entry instead of losing every waypoint in the file.
+                val obj = runCatching { array.optJSONObject(i) }.getOrNull() ?: continue
+                val lat = jsonDouble(obj, "lat", "latitude", "y") ?: continue
+                val lng = jsonDouble(obj, "lng", "lon", "long", "longitude", "x") ?: continue
+                if (!isPlausibleCoordinate(lat, lng)) continue
+                val typeStr = obj.optString("type", obj.optString("waypointType", WaypointType.CUSTOM.name))
+                val type = WaypointType.entries.firstOrNull { it.name.equals(typeStr, ignoreCase = true) }
+                    ?: WaypointType.CUSTOM
+                list.add(Waypoint(
+                    id = obj.optString("id", UUID.randomUUID().toString()),
+                    name = obj.optString("name", obj.optString("title", "Pin ${i + 1}")),
+                    latitude = lat,
+                    longitude = lng,
+                    type = type,
+                    notes = obj.optString("notes", ""),
+                    timestamp = jsonTimestamp(obj, "ts", "timestamp", "time", "t") ?: System.currentTimeMillis()
+                ))
+            }
+            return list
         }
 
         fun waypointsToJson(waypoints: List<Waypoint>): String {
@@ -238,8 +320,13 @@ class MilesRepository(
             put("activity", JSONObject().apply {
                 put("id", act.id); put("title", act.title); put("type", act.activityType); put("startTime", act.startTime); put("endTime", act.endTime)
                 put("durationSeconds", act.durationSeconds); put("distanceMeters", act.distanceMeters); put("steps", act.steps)
-                put("avgPaceSecPerKm", act.avgPaceSecPerKm); put("avgSpeedKmh", act.avgSpeedKmh); put("elevationGainM", act.elevationGainM)
-                put("calories", act.calories); put("avgHeartRate", act.avgHeartRate); put("points", JSONArray(pointsToJson(points))); put("waypoints", JSONArray(act.waypointsJson)); put("notes", act.notes)
+                put("avgPaceSecPerKm", act.avgPaceSecPerKm); put("bestPaceSecPerKm", act.bestPaceSecPerKm)
+                put("avgSpeedKmh", act.avgSpeedKmh); put("maxSpeedKmh", act.maxSpeedKmh)
+                put("elevationGainM", act.elevationGainM); put("elevationLossM", act.elevationLossM)
+                put("calories", act.calories); put("avgHeartRate", act.avgHeartRate); put("maxHeartRate", act.maxHeartRate)
+                put("isFavorite", act.isFavorite); put("sensorSource", act.sensorSource)
+                put("points", JSONArray(pointsToJson(points))); put("waypoints", JSONArray(waypointsToJson(parseWaypoints(act.waypointsJson))))
+                put("notes", act.notes)
             })
         }
         val plainJson = root.toString(2)
@@ -249,7 +336,9 @@ class MilesRepository(
     suspend fun exportActivityAsGpx(activityId: String): String = withContext(Dispatchers.IO) {
         val act = activityDao.getActivityByIdOnce(activityId) ?: return@withContext ""
         val points = filterPointsWithPrivacyZones(parsePoints(act.routePointsJson))
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             append("<gpx version=\"1.1\" creator=\"MILES Privacy Fitness\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n")
@@ -287,7 +376,9 @@ class MilesRepository(
     suspend fun exportActivityAsTcx(activityId: String): String = withContext(Dispatchers.IO) {
         val act = activityDao.getActivityByIdOnce(activityId) ?: return@withContext ""
         val points = filterPointsWithPrivacyZones(parsePoints(act.routePointsJson))
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             append("<TrainingCenterDatabase xmlns=\"http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2\">\n")
@@ -488,12 +579,17 @@ class MilesRepository(
 
     suspend fun importFromKml(kmlStr: String): Int = withContext(Dispatchers.IO) {
         val nameRegex = Regex("""<name>([^<]+)</name>""")
-        val name = nameRegex.find(kmlStr)?.groupValues?.get(1)?.trim() ?: "Imported KML Workout"
+        // <name> under <Placemark>/<trk> names the track; the leading Document name is the folder.
+        val name = Regex("""<Placemark>[\s\S]*?<name>([^<]+)</name>""").find(kmlStr)?.groupValues?.get(1)?.trim()
+            ?: nameRegex.find(kmlStr)?.groupValues?.get(1)?.trim()
+            ?: "Imported KML Workout"
         val coordMatch = Regex("""<coordinates>([\s\S]*?)</coordinates>""").find(kmlStr) ?: return@withContext 0
         val coordText = coordMatch.groupValues[1].trim()
         val points = mutableListOf<GpsPoint>()
         val tokens = coordText.split(Regex("""\s+"""))
-        val now = System.currentTimeMillis()
+        // Fall back to now only so point timestamps stay monotonic when KML has no <when>.
+        val firstTime = Regex("""<when>([^<]+)</when>""").find(kmlStr)?.groupValues?.get(1)?.let { parseTimestamp(it) }
+        val now = firstTime ?: System.currentTimeMillis()
         tokens.forEachIndexed { idx, token ->
             val parts = token.split(",")
             if (parts.size >= 2) {
@@ -715,19 +811,29 @@ class MilesRepository(
 
     private suspend fun insertJsonActivity(obj: JSONObject) {
         val now = System.currentTimeMillis()
-        val title = obj.optString("title", "Imported Workout")
-        val type = obj.optString("type", obj.optString("activityType", ActivityType.RUNNING.name))
-        val startTime = obj.optLong("startTime", now - 3600000L)
-        val endTime = obj.optLong("endTime", startTime + 1800000L)
-        val duration = obj.optLong("durationSeconds", (endTime - startTime) / 1000)
-        var distance = obj.optDouble("distanceMeters", obj.optDouble("distanceKm", 0.0) * 1000.0)
+        val title = obj.optString("title").ifBlank { obj.optString("name").ifBlank { "Imported Workout" } }
+        val type = obj.optString("activityType").ifBlank {
+            obj.optString("type").ifBlank { obj.optString("sport").ifBlank { ActivityType.RUNNING.name } }
+        }.let { ActivityType.fromString(it).name }
+
+        // Timestamps arrive as epoch millis, epoch seconds, or ISO-8601 depending on the exporter.
+        val startTime = jsonInstant(obj, "startTime", "startTimestamp", "start", "startDate", "date", "time")
+            ?: (now - 3600000L)
+        val endTime = jsonInstant(obj, "endTime", "endTimestamp", "end", "endDate")
+            ?: (startTime + 1800000L)
+        val duration = jsonDurationSeconds(obj)
+            ?: if (endTime > startTime) (endTime - startTime) / 1000L else 0L
+
+        var distance = jsonDistanceMeters(obj, "distanceMeters", "distanceKm", "distance")
+            ?: jsonDoubleField(obj, "distanceMeters", "distance", "distanceKm", "distanceMiles")
+                ?.let { if (obj.has("distanceKm")) it * 1000.0 else it }
+            ?: 0.0
 
         // Robust point parsing supporting any key: routePointsJson, points, routePoints, track, coordinates
         val rawPoints = obj.opt("routePointsJson") ?: obj.opt("points") ?: obj.opt("routePoints") ?: obj.opt("track") ?: obj.opt("coordinates")
         val pointsList = if (rawPoints != null) parsePoints(rawPoints.toString()) else emptyList()
-        val routePointsJson = pointsToJson(pointsList)
 
-        // If distance was 0, compute from GPS track points
+        // Only derive distance from the track when the file did not supply one.
         if (distance <= 0.0 && pointsList.size >= 2) {
             var sumDist = 0.0
             for (i in 0 until pointsList.size - 1) {
@@ -741,14 +847,12 @@ class MilesRepository(
 
         val rawWaypoints = obj.opt("waypointsJson") ?: obj.opt("waypoints")
         val waypointsList = if (rawWaypoints != null) parseWaypoints(rawWaypoints.toString()) else emptyList()
-        val waypointsJson = waypointsToJson(waypointsList)
 
-        val steps = obj.optInt("steps", (distance * 1.3).toInt())
-        val calories = obj.optInt("calories", (distance / 1000.0 * 65.0).toInt())
-        val hr = obj.optInt("avgHeartRate", 0)
+        val steps = jsonIntField(obj, "steps", "stepCount") ?: (distance * 1.3).toInt()
+        val calories = jsonIntField(obj, "calories", "kcal") ?: (distance / 1000.0 * 65.0).toInt()
 
         val entity = ActivityEntity(
-            id = obj.optString("id", UUID.randomUUID().toString()),
+            id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
             title = title,
             activityType = type,
             startTime = startTime,
@@ -756,44 +860,303 @@ class MilesRepository(
             durationSeconds = duration,
             distanceMeters = distance,
             steps = steps,
-            avgPaceSecPerKm = if (distance > 0) duration / (distance / 1000.0) else 0.0,
-            avgSpeedKmh = if (duration > 0) (distance / 1000.0) / (duration / 3600.0) else 0.0,
-            elevationGainM = obj.optDouble("elevationGainM", 0.0),
+            // Keep file-provided pace/speed; only derive them when absent.
+            avgPaceSecPerKm = jsonDoubleField(obj, "avgPaceSecPerKm", "averagePaceSecPerKm", "paceSecPerKm")
+                ?: if (distance > 0) duration / (distance / 1000.0) else 0.0,
+            bestPaceSecPerKm = jsonDoubleField(obj, "bestPaceSecPerKm", "bestPace") ?: 0.0,
+            avgSpeedKmh = jsonDoubleField(obj, "avgSpeedKmh", "averageSpeedKmh")
+                ?: if (duration > 0) (distance / 1000.0) / (duration / 3600.0) else 0.0,
+            maxSpeedKmh = jsonDoubleField(obj, "maxSpeedKmh", "maxSpeed") ?: 0.0,
+            elevationGainM = jsonDoubleField(obj, "elevationGainM", "elevationGain") ?: 0.0,
+            elevationLossM = jsonDoubleField(obj, "elevationLossM", "elevationLoss") ?: 0.0,
             calories = calories,
-            avgHeartRate = hr,
-            routePointsJson = routePointsJson,
-            waypointsJson = waypointsJson,
-            notes = obj.optString("notes", "Imported from file")
+            avgHeartRate = jsonIntField(obj, "avgHeartRate", "averageHeartRate") ?: 0,
+            maxHeartRate = jsonIntField(obj, "maxHeartRate", "maximumHeartRate") ?: 0,
+            routePointsJson = pointsToJson(pointsList),
+            waypointsJson = waypointsToJson(waypointsList),
+            weatherJson = obj.optString("weatherJson"),
+            notes = obj.optString("notes").ifBlank { "Imported from file" },
+            photoUri = if (obj.isNull("photoUri")) null else obj.optString("photoUri").takeIf { it.isNotBlank() },
+            isFavorite = obj.optBoolean("isFavorite", false),
+            sensorSource = obj.optString("sensorSource").ifBlank { "Imported" }
         )
         activityDao.insertActivity(entity)
     }
 
-    private suspend fun importFromCsv(csvStr: String): Int {
-        var imported = 0
-        val lines = csvStr.lines().filter { it.isNotBlank() }
-        if (lines.isEmpty()) return 0
-        val header = lines.first().lowercase()
-        val dataLines = if (header.contains("date") || header.contains("title") || header.contains("distance") || header.contains("sport")) lines.drop(1) else lines
-        for (line in dataLines) {
-            val cols = line.split(",").map { it.trim().removeSurrounding("\"") }
-            if (cols.size >= 3) {
-                val title = cols.getOrNull(0) ?: "Imported Fitness Log"
-                val distKm = cols.getOrNull(1)?.toDoubleOrNull() ?: 0.0
-                val durationMin = cols.getOrNull(2)?.toLongOrNull() ?: 30L
-                val steps = cols.getOrNull(3)?.toIntOrNull() ?: 0
-                val now = System.currentTimeMillis() - imported * 86400000L
-                val durationSec = durationMin * 60L
-                activityDao.insertActivity(ActivityEntity(
-                    id = UUID.randomUUID().toString(), title = title, activityType = ActivityType.RUNNING.name,
-                    startTime = now - durationSec * 1000L, endTime = now, durationSeconds = durationSec, distanceMeters = distKm * 1000.0, steps = steps,
-                    avgPaceSecPerKm = if (distKm > 0) durationSec / distKm else 0.0,
-                    avgSpeedKmh = if (durationSec > 0) distKm / (durationSec / 3600.0) else 0.0,
-                    calories = cols.getOrNull(4)?.toIntOrNull() ?: 0, avgHeartRate = 0, routePointsJson = "[]", waypointsJson = "[]", notes = "Imported from CSV fitness records"
-                ))
-                imported++
+    private fun jsonInstant(obj: JSONObject, vararg keys: String): Long? {
+        for (key in keys) {
+            if (!obj.has(key) || obj.isNull(key)) continue
+            when (val raw = obj.opt(key)) {
+                is Number -> return normalizeEpochMillis(raw.toLong())
+                is String -> raw.trim().takeIf { it.isNotEmpty() }?.let { text ->
+                    parseTimestamp(text)?.let { return it }
+                }
             }
         }
+        return null
+    }
+
+    /**
+     * Duration in seconds. An explicit `durationSeconds` is already seconds; a bare `duration` is
+     * treated as milliseconds when large, and colon-separated values are read as hh:mm:ss.
+     */
+    private fun jsonDurationSeconds(obj: JSONObject): Long? {
+        val hasSecondsKey = obj.has("durationSeconds") && !obj.isNull("durationSeconds")
+        val raw = if (hasSecondsKey) obj.opt("durationSeconds") else obj.opt("duration")
+        when (raw) {
+            is Number -> {
+                val value = raw.toLong()
+                return if (hasSecondsKey) value else if (value > 100_000L) value / 1000L else value
+            }
+            is String -> {
+                val text = raw.trim()
+                text.toLongOrNull()?.let { return if (!hasSecondsKey && it > 100_000L) it / 1000L else it }
+                text.toDoubleOrNull()?.let { return it.toLong() }
+                if (text.contains(':') && text.split(':').all { it.toDoubleOrNull() != null }) {
+                    return text.split(':').fold(0L) { acc, part -> acc * 60 + part.toDouble().toLong() }
+                }
+                return text.toDoubleOrNull()?.toLong()
+            }
+        }
+        return null
+    }
+
+    /** Distance in meters from any of the distance keys, applying the key's unit suffix. */
+    private fun jsonDistanceMeters(obj: JSONObject, vararg keys: String): Double? {
+        for (key in keys) {
+            if (!obj.has(key) || obj.isNull(key)) continue
+            val raw = obj.opt(key)
+            val value = when (raw) {
+                is Number -> raw.toDouble()
+                is String -> raw.trim().toDoubleOrNull()
+                else -> continue
+            } ?: continue
+            return when {
+                key.endsWith("Km") || key.endsWith("km") -> value * 1000.0
+                key.endsWith("Meters") || key.endsWith("meters") || key.endsWith("Metres") -> value
+                else -> value
+            }
+        }
+        return null
+    }
+
+    private fun jsonDoubleField(obj: JSONObject, vararg keys: String): Double? {
+        for (key in keys) {
+            if (!obj.has(key) || obj.isNull(key)) continue
+            when (val raw = obj.opt(key)) {
+                is Number -> return raw.toDouble().takeIf { it.isFinite() }
+                is String -> raw.trim().toDoubleOrNull()?.takeIf { it.isFinite() }?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun jsonIntField(obj: JSONObject, vararg keys: String): Int? {
+        for (key in keys) {
+            if (!obj.has(key) || obj.isNull(key)) continue
+            when (val raw = obj.opt(key)) {
+                is Number -> return raw.toInt()
+                is String -> raw.trim().toDoubleOrNull()?.let { return it.toInt() }
+            }
+        }
+        return null
+    }
+
+    private fun normalizeEpochMillis(value: Long): Long = when {
+        value <= 0L -> value
+        value < 100_000_000_000L -> value * 1000L // seconds
+        else -> value
+    }
+
+    private suspend fun importFromCsv(csvStr: String): Int {
+        val rows = parseCsv(csvStr)
+        if (rows.isEmpty()) return 0
+
+        val normalizedHeader = rows.first().map { normalizeHeader(it) }
+        // A real header has no cells that parse as numbers; a header-less first row always does.
+        val hasHeader = normalizedHeader.any { it.isNotEmpty() } &&
+            rows.first().all { cell ->
+                val normalized = normalizeHeader(cell)
+                normalized.isEmpty() || (normalized.first().isLetter() && normalized.none { it.isDigit() })
+            }
+        val header = if (hasHeader) normalizedHeader else emptyList()
+        val dataRows = if (hasHeader) rows.drop(1) else rows
+
+        var imported = 0
+        val baseTime = System.currentTimeMillis()
+        for (cells in dataRows) {
+            if (cells.all { it.isBlank() }) continue
+
+            // Named columns take priority; positional fallbacks keep header-less logs importable.
+            fun named(vararg keys: String): String? = keys.firstNotNullOfOrNull { key ->
+                header.indexOfFirst { it == key }
+                    .takeIf { it >= 0 }
+                    ?.let { cells.getOrNull(it) }
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+            }
+
+            val title = named("title", "name", "activityname", "workout", "activity", "label")
+                ?: cells.getOrNull(0)?.trim()?.takeIf { it.isNotEmpty() }
+                ?: "Imported Fitness Log"
+
+            val startTime = named("starttime", "startdate", "date", "timestamp", "start", "time")
+                ?.let { parseTimestamp(it) }
+                ?: (baseTime - imported * 86400000L)
+
+            val durationSec = parseCsvDuration(
+                named("durationseconds", "durationsec", "durationsecs", "duration", "elapsedtime", "movingtime")
+            ) ?: parseCsvDuration(cells.getOrNull(2))?.let { if (cells.getOrNull(2)!!.contains(':')) it else it * 60L }
+                ?: 1800L
+
+            val endTime = named("endtime", "enddate", "end")
+                ?.let { parseTimestamp(it) }
+                ?: (startTime + durationSec * 1000L)
+
+            val distanceMeters = parseCsvDistanceMeters(
+                named("distancemeters", "distancekm", "distancem", "distance")
+            ) ?: parseCsvDistanceMeters(cells.getOrNull(1), assumeKm = !hasHeader) ?: 0.0
+
+            val distanceKm = distanceMeters / 1000.0
+            val steps = parseCsvInt(named("steps", "stepcount")) ?: parseCsvInt(cells.getOrNull(3)) ?: 0
+            val calories = parseCsvInt(named("calories", "kcal", "caloriesburned"))
+                ?: parseCsvInt(cells.getOrNull(4)) ?: 0
+
+            // Track data only survives when the export included it; otherwise it stays empty.
+            val points = named("routepointsjson", "routepoints", "points", "track", "coordinates")
+                ?.let { parsePoints(it) }.orEmpty()
+            val waypoints = named("waypointsjson", "waypoints", "pins")
+                ?.let { parseWaypoints(it) }.orEmpty()
+
+            activityDao.insertActivity(ActivityEntity(
+                id = named("id", "activityid") ?: UUID.randomUUID().toString(),
+                title = title,
+                activityType = named("activitytype", "type", "sport", "activity")
+                    ?.let { ActivityType.fromString(it).name }
+                    ?: ActivityType.RUNNING.name,
+                startTime = startTime,
+                endTime = endTime,
+                durationSeconds = durationSec,
+                distanceMeters = distanceMeters,
+                steps = steps,
+                avgPaceSecPerKm = parseCsvDouble(named("avgpacesecperkm", "averagepace", "pace"))
+                    ?: if (distanceKm > 0) durationSec / distanceKm else 0.0,
+                bestPaceSecPerKm = parseCsvDouble(named("bestpacesecperkm", "bestpace")) ?: 0.0,
+                avgSpeedKmh = parseCsvDouble(named("avgspeedkmh", "averagespeedkmh"))
+                    ?: if (durationSec > 0) distanceKm / (durationSec / 3600.0) else 0.0,
+                maxSpeedKmh = parseCsvDouble(named("maxspeedkmh", "maxspeed")) ?: 0.0,
+                elevationGainM = parseCsvDouble(named("elevationgainm", "elevationgain")) ?: 0.0,
+                elevationLossM = parseCsvDouble(named("elevationlossm", "elevationloss")) ?: 0.0,
+                calories = calories,
+                avgHeartRate = parseCsvInt(named("avgheartrate", "averageheartrate", "heartrate", "hr")) ?: 0,
+                maxHeartRate = parseCsvInt(named("maxheartrate", "maximumheartrate")) ?: 0,
+                routePointsJson = pointsToJson(points),
+                waypointsJson = waypointsToJson(waypoints),
+                notes = named("notes", "note", "comment") ?: "Imported from CSV fitness records",
+                isFavorite = parseCsvBoolean(named("isfavorite", "favorite", "favourite")) ?: false,
+                sensorSource = named("sensorsource", "source", "device") ?: "Imported"
+            ))
+            imported++
+        }
         return imported
+    }
+
+    /**
+     * Splits CSV text into rows of cells, honouring quoted fields, embedded commas/newlines, and
+     * doubled-quote escapes. Plain [String.split] silently shifted every column after the first
+     * quoted value, which is how titles containing commas were lost.
+     */
+    private fun parseCsv(text: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        var row = mutableListOf<String>()
+        val cell = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                inQuotes && c == '"' && i + 1 < text.length && text[i + 1] == '"' -> {
+                    cell.append('"'); i++
+                }
+                c == '"' -> inQuotes = !inQuotes
+                !inQuotes && (c == ',' || c == ';' || c == '\t') -> { row.add(cell.toString()); cell.setLength(0) }
+                !inQuotes && (c == '\n' || c == '\r') -> {
+                    if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++
+                    row.add(cell.toString()); cell.setLength(0)
+                    if (row.any { it.isNotBlank() }) rows.add(row)
+                    row = mutableListOf()
+                }
+                else -> cell.append(c)
+            }
+            i++
+        }
+        if (cell.isNotEmpty() || row.isNotEmpty()) {
+            row.add(cell.toString())
+            if (row.any { it.isNotBlank() }) rows.add(row)
+        }
+        return rows
+    }
+
+    private fun normalizeHeader(value: String): String =
+        value.trim().lowercase(Locale.US).filter { it.isLetterOrDigit() }
+
+    /** Accepts "45:30", "2700", "45 min", or "2700000 ms". */
+    private fun parseCsvDuration(raw: String?): Long? {
+        val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        text.toLongOrNull()?.let { return if (it > 100_000L) it / 1000L else it }
+        text.toDoubleOrNull()?.let { return it.toLong().coerceAtLeast(0L) }
+        if (text.contains(':')) {
+            val parts = text.split(':')
+            if (parts.all { it.toDoubleOrNull() != null }) {
+                return parts.fold(0L) { acc, p -> acc * 60 + (p.toDouble().toLong()) }
+            }
+        }
+        val number = Regex("\\d+(\\.\\d+)?").find(text)?.value?.toDoubleOrNull() ?: return null
+        val unit = text.substringAfter(number.toString(), "").trim().lowercase(Locale.US)
+        return when {
+            unit.startsWith("h") -> (number * 3600).toLong()
+            unit.startsWith("min") || unit == "m" -> (number * 60).toLong()
+            unit.startsWith("s") || unit.startsWith("sec") -> number.toLong()
+            unit.startsWith("ms") -> (number / 1000).toLong()
+            else -> number.toLong()
+        }
+    }
+
+    /** Returns the value in meters, applying any unit suffix found in the cell. */
+    private fun parseCsvDistanceMeters(raw: String?, assumeKm: Boolean = false): Double? {
+        val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val number = Regex("-?\\d+(\\.\\d+)?").find(text)?.value?.toDoubleOrNull() ?: return null
+        val unit = text.substringAfter(number.toString(), "").trim().lowercase(Locale.US)
+        return when {
+            unit.startsWith("km") || unit.startsWith("kilomet") -> number * 1000.0
+            unit.startsWith("mi") || unit.startsWith("mile") -> number * 1609.344
+            unit.startsWith("ft") || unit.startsWith("feet") -> number * 0.3048
+            unit.startsWith("m") -> number
+            assumeKm -> number * 1000.0
+            else -> number
+        }
+    }
+
+    private fun parseCsvInt(raw: String?): Int? {
+        val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        text.toIntOrNull()?.let { return it }
+        text.toDoubleOrNull()?.let { return it.toInt() }
+        return Regex("-?\\d+").find(text)?.value?.toIntOrNull()
+    }
+
+    private fun parseCsvDouble(raw: String?): Double? {
+        val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        text.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { return it }
+        return Regex("-?\\d+(\\.\\d+)?").find(text)?.value?.toDoubleOrNull()?.takeIf { it.isFinite() }
+    }
+
+    private fun parseCsvBoolean(raw: String?): Boolean? {
+        val text = raw?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotEmpty() } ?: return null
+        return when (text) {
+            "true", "yes", "y", "1" -> true
+            "false", "no", "n", "0" -> false
+            else -> null
+        }
     }
 
     private suspend fun importFromGpx(gpxStr: String): Int {
