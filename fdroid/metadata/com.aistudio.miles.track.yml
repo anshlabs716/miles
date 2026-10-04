@@ -16,7 +16,7 @@ Repo: https://github.com/anshlabs716/miles
 Builds:
   - versionName: 1.0.9
     versionCode: 5
-    commit: 6eea3256d22e84621638f44a94972f79959d299f
+    commit: ae90e79f53f055892f08b86d41437259fc5db0e4
     subdir: app
     gradle:
       - yes
