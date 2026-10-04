@@ -1,0 +1,5 @@
+- Fixed a crash when scrolling to the bottom of Settings (the About card referenced an empty logo image)
+- The About card now reads the real app version instead of a hardcoded one
+- The Source Code button now opens the actual MILES repository
+- Health Connect: clearer “permission not granted” action that opens app settings, and the system dialogs no longer clash
+- Enabled R8 minification and resource shrinking for release builds (smaller APK)

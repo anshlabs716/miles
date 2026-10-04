@@ -90,8 +90,8 @@ import kotlin.math.tan
 
 enum class RealOsmTileSource(val title: String, val attribution: String) {
     STANDARD("OpenStreetMap", "© OpenStreetMap contributors"),
-    SATELLITE("Satellite Imagery", "© Esri World Imagery"),
-    HYBRID("Hybrid (Satellite + Roads)", "© Esri / CARTO / OSM"),
+    SATELLITE("Satellite Imagery", "Esri World Imagery — Esri, Maxar, Earthstar Geographics"),
+    HYBRID("Hybrid (Satellite + Roads)", "Esri World Imagery + © CARTO / © OpenStreetMap contributors"),
     CYCLOSM("CyclOSM Outdoor", "© CyclOSM / OpenStreetMap"),
     OPEN_TOPO("Topographic (OpenTopo)", "© OpenTopoMap / SRTM"),
     CARTO_DARK("Carto Dark", "© CARTO / OpenStreetMap"),
@@ -322,9 +322,9 @@ fun RealOsmMapView(
                         RealOsmTileSource.STANDARD ->
                             "https://tile.openstreetmap.org/$zoomInt/$clampedTileX/$tileY.png"
                         RealOsmTileSource.SATELLITE ->
-                            "https://mt1.google.com/vt/lyrs=s&x=$clampedTileX&y=$tileY&z=$zoomInt"
+                            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$zoomInt/$tileY/$clampedTileX"
                         RealOsmTileSource.HYBRID ->
-                            "https://mt1.google.com/vt/lyrs=y&x=$clampedTileX&y=$tileY&z=$zoomInt"
+                            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$zoomInt/$tileY/$clampedTileX"
                         RealOsmTileSource.CYCLOSM ->
                             "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/$zoomInt/$clampedTileX/$tileY.png"
                         RealOsmTileSource.HUMANITARIAN ->
@@ -342,7 +342,7 @@ fun RealOsmMapView(
                     val requestBuilder = ImageRequest.Builder(context)
                         .data(tileUrl)
                         .crossfade(true)
-                    if (effectiveTileSource == RealOsmTileSource.STANDARD || effectiveTileSource == RealOsmTileSource.CYCLOSM || effectiveTileSource == RealOsmTileSource.HUMANITARIAN) {
+                    if (effectiveTileSource == RealOsmTileSource.STANDARD || effectiveTileSource == RealOsmTileSource.CYCLOSM || effectiveTileSource == RealOsmTileSource.HUMANITARIAN || effectiveTileSource == RealOsmTileSource.SATELLITE || effectiveTileSource == RealOsmTileSource.HYBRID) {
                         requestBuilder.addHeader("User-Agent", "MILES-Android-App/2.4 (contact: bhatiaansh716@gmail.com)")
                     }
 

@@ -87,6 +87,7 @@ fun DevicesScreen(
     val wearProfile by wearCompanion.deviceProfile.collectAsState()
     val watchSettings by wearCompanion.watchSettings.collectAsState()
     val wearLogs by wearCompanion.communicationLogs.collectAsState()
+    val wearLanEnabled by wearCompanion.lanDiscoveryEnabled.collectAsState()
 
     val userPrefs by preferences?.userPreferences?.collectAsState() ?: remember { mutableStateOf(null) }
 
@@ -506,6 +507,16 @@ fun DevicesScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
                             text = "Protocol Version: ${wearProfile?.protocolVersion} • Standalone Ready",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (wearLanEnabled) {
+                                "LAN watch discovery: ON — broadcasting on your local network"
+                            } else {
+                                "LAN watch discovery: OFF — tap Pair to enable local-network watch discovery"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

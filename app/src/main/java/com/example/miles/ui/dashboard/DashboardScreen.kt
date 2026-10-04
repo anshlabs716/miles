@@ -162,10 +162,12 @@ fun DashboardScreen(
         batteryManager?.isCharging == true
     }
 
-    // Real weather for your location (Open-Meteo — free, no API key)
+    // Online weather (Open-Meteo) is opt-in: nothing leaves the device until the
+    // user turns it on in Settings > Privacy.
+    val onlineWeatherEnabled = userPreferences.onlineWeatherEnabled
     var weather by remember { mutableStateOf<WeatherInfo?>(null) }
-    LaunchedEffect(Unit) {
-        weather = WeatherFetcher.fetch(context)
+    LaunchedEffect(onlineWeatherEnabled) {
+        weather = if (onlineWeatherEnabled) WeatherFetcher.fetch(context) else null
     }
     val weatherCond = weather?.condition.orEmpty()
     val weatherIcon = when {
@@ -317,7 +319,7 @@ fun DashboardScreen(
                                     wt.condition
                                 ).joinToString(" ")
                             }
-                            ?: "Weather --",
+                            ?: if (onlineWeatherEnabled) "Weather --" else "Weather off",
                         tint = Color(0xFFFFB300),
                         onClick = { cardWeather = !cardWeather }
                     )
@@ -483,7 +485,11 @@ fun DashboardScreen(
                                                     wt.condition
                                                 ).joinToString(" • ")
                                             }
-                                            ?: "Weather unavailable — enable location & check connection",
+                                            ?: if (onlineWeatherEnabled) {
+                                                "Weather unavailable — enable location & check connection"
+                                            } else {
+                                                "Online weather is off — enable it in Settings › Privacy"
+                                            },
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                     )
                                 }

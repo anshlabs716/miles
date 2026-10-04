@@ -136,6 +136,9 @@ data class UserPreferences(
     val ghostPacerMode: String = "PERSONAL_RECORD",
     val targetPaceSecPerKm: Double = 330.0,
 
+    // Online services (opt-in, off by default)
+    val onlineWeatherEnabled: Boolean = false,
+
     // Developer & Diagnostics
     val devModeUnlocked: Boolean = true,
     val mockGpsEnabled: Boolean = false,
@@ -294,6 +297,7 @@ class MilesPreferences(context: Context) {
             mapHeadingRotationMode = prefs.getString("map_heading_mode", "NORTH_UP") ?: "NORTH_UP",
             ghostPacerMode = prefs.getString("ghost_pacer_mode", "PERSONAL_RECORD") ?: "PERSONAL_RECORD",
             targetPaceSecPerKm = prefs.getFloat("target_pace_sec_km", 330.0f).toDouble(),
+            onlineWeatherEnabled = prefs.getBoolean("online_weather_enabled", false),
 
             devModeUnlocked = prefs.getBoolean("dev_mode_unlocked", true),
             mockGpsEnabled = prefs.getBoolean("mock_gps_enabled", false),
@@ -518,6 +522,7 @@ class MilesPreferences(context: Context) {
             .putString("map_heading_mode", updated.mapHeadingRotationMode)
             .putString("ghost_pacer_mode", updated.ghostPacerMode)
             .putFloat("target_pace_sec_km", updated.targetPaceSecPerKm.toFloat())
+            .putBoolean("online_weather_enabled", updated.onlineWeatherEnabled)
             .putBoolean("dev_mode_unlocked", updated.devModeUnlocked)
             .putBoolean("mock_gps_enabled", updated.mockGpsEnabled)
             .putFloat("mock_gps_lat", updated.mockGpsLat.toFloat())

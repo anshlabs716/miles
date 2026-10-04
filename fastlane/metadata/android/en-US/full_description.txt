@@ -15,6 +15,7 @@ Privacy:
 • No ads
 • No account required — not a MILES one, not a Google one
 • No mandatory analytics
+• Online weather is opt-in; the Wear OS watch beacon only runs after you pair a watch
 • Your activity data stays on your device and can be exported or deleted at any time
 
-No Google Play Services required. No proprietary map SDK: maps use OpenStreetMap data.
+No Google Play Services required. No proprietary map SDK: maps use OpenStreetMap data, with satellite imagery from Esri World Imagery.

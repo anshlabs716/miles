@@ -213,7 +213,7 @@ fun RouteBuilderScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "OpenStreetMap • Satellite • Turn-by-turn",
+                        text = "OpenStreetMap • Esri Satellite Imagery • Turn-by-turn",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

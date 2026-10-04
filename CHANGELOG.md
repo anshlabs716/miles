@@ -2,6 +2,24 @@
 
 All notable changes to MILES are recorded here.
 
+## [Unreleased]
+
+### Fixed
+- Satellite and hybrid map layers no longer request tiles from the undocumented Google
+  endpoint. They now use Esri World Imagery, and the on-map attribution names the real
+  source.
+- Dashboard weather is now opt-in: with "Online Weather (Open-Meteo)" off (the default)
+  MILES makes no weather request at all.
+- The Wear OS local-network beacon no longer broadcasts on every launch. It starts only
+  after you pair/enable a watch and stops again when you unpair.
+- Added the missing `RECEIVE_BOOT_COMPLETED` permission, so the widget sync receiver
+  actually runs after a reboot.
+- Health Connect now asks only for the two data types MILES reads (steps and exercise
+  sessions), matching the permission rationale shown to the user.
+
+### Changed
+- Added the missing fastlane changelog for build 4.
+
 ## [1.0.8] - 2026-09-29
 
 ### Fixed

@@ -719,7 +719,7 @@ fun SettingsScreen(
             }
 
             // 9. PRIVACY, DATA & EXPORTS
-            if (shouldShow(SettingsCategory.PRIVACY, "privacy", "zone", "backup", "trash", "restore", "wipe", "reset", "export", "sqlite")) {
+            if (shouldShow(SettingsCategory.PRIVACY, "privacy", "zone", "backup", "trash", "restore", "wipe", "reset", "export", "sqlite", "weather", "open-meteo", "online")) {
                 item {
                     PrivacySettingsCard(
                         privacyZones = privacyZones,
@@ -735,7 +735,8 @@ fun SettingsScreen(
                         onOpenTrash = { showTrashDialog = true },
                         onWipeData = { showWipeConfirmDialog = true },
                         onResetDefaults = { showResetDefaultsDialog = true },
-                        onOpenPermissionsPrompt = onOpenPermissionsPrompt
+                        onOpenPermissionsPrompt = onOpenPermissionsPrompt,
+                        preferences = preferences
                     )
                 }
             }

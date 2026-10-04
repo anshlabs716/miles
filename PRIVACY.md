@@ -19,10 +19,15 @@ in a local database on your device. This data is not uploaded anywhere by the ap
 ## What leaves your device, and only when you ask
 
 - **Maps** — map tiles and routing requests are sent to the map/routing service
-  you are using (OpenStreetMap tiles, OSRM routing) so the map can load. These
-  requests include the map area you are viewing.
-- **Weather** — weather lookups send your approximate location to the weather
-  service so it can return local conditions.
+  you are using (OpenStreetMap, CARTO, Esri World Imagery, OpenTopoMap, Memomaps
+  tiles and OSRM routing) so the map can load. These requests include the map
+  area you are viewing.
+- **Weather** — only if you turn on "Online Weather (Open-Meteo)" in Settings ›
+  Privacy. The lookup sends your approximate location to the weather service so
+  it can return local conditions. With the switch off MILES makes no weather
+  request at all.
+- **Wear OS sync** — only after you pair/enable a watch in Devices. Local-network
+  discovery then broadcasts a small beacon on your own network until you unpair.
 - **Your own exports** — when you export or share a file, that file goes
   wherever you send it.
 
@@ -35,6 +40,8 @@ app keeps working without them wherever possible:
 - Activity recognition — for step counting
 - Notifications — for workout and reminder alerts
 - Bluetooth — for heart-rate straps and cadence sensors
+- Health Connect — only your step count and exercise sessions; MILES asks for
+  nothing else, and works fully without it
 
 ## Your data, your control
 

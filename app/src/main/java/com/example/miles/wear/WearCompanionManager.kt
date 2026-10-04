@@ -71,10 +71,15 @@ data class WearLogMessage(
  * to over TCP JSON frames ([LanTransport]), so live metrics, remote control,
  * watch HR/cadence streaming and the offline queue are all real. Android
  * Bluetooth pairing detection is still shown as a fallback signal.
+ *
+ * LAN discovery broadcasts on the local network, so it is **opt-in**: it only
+ * starts after the user explicitly pairs/enables the watch ([enableLan]), and
+ * it stops again on [disconnect]. Nothing is broadcast on a plain app launch.
  */
 class WearCompanionManager(private val context: Context) {
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val opts = context.getSharedPreferences("miles_wear", Context.MODE_PRIVATE)
 
     private val _connectionStatus = MutableStateFlow(WearConnectionStatus.DISCONNECTED)
     val connectionStatus: StateFlow<WearConnectionStatus> = _connectionStatus.asStateFlow()
@@ -97,14 +102,43 @@ class WearCompanionManager(private val context: Context) {
     private val _communicationLogs = MutableStateFlow<List<WearLogMessage>>(emptyList())
     val communicationLogs: StateFlow<List<WearLogMessage>> = _communicationLogs.asStateFlow()
 
+    private val _lanDiscoveryEnabled = MutableStateFlow(opts.getBoolean(KEY_LAN_ENABLED, false))
+    /** True once the user has explicitly enabled/pair the watch; drives the LAN beacon. */
+    val lanDiscoveryEnabled: StateFlow<Boolean> = _lanDiscoveryEnabled.asStateFlow()
+
     private var transport: LanTransport? = null
     private var lastWearPeerId: String? = null
 
     init {
-        startLan()
+        // Only resume LAN discovery when the user enabled it in a previous session.
+        if (_lanDiscoveryEnabled.value) startLan()
     }
 
     // ---------------- local-network transport ----------------
+
+    /** Enables LAN discovery and starts the beacon. Call only from explicit user action. */
+    fun enableLan() {
+        if (transport == null) {
+            opts.edit().putBoolean(KEY_LAN_ENABLED, true).apply()
+            _lanDiscoveryEnabled.value = true
+            startLan()
+            logMessage("SYS", "LAN_ENABLED", "User enabled local-network watch discovery.")
+        }
+    }
+
+    /** Stops LAN discovery and forgets the opt-in so the beacon stays off until asked again. */
+    fun disableLan() {
+        stopLan()
+        opts.edit().putBoolean(KEY_LAN_ENABLED, false).apply()
+        _lanDiscoveryEnabled.value = false
+        logMessage("SYS", "LAN_DISABLED", "Local-network watch discovery stopped.")
+    }
+
+    private fun stopLan() {
+        transport?.stop()
+        transport = null
+        lastWearPeerId = null
+    }
 
     private fun startLan() {
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
@@ -207,6 +241,8 @@ class WearCompanionManager(private val context: Context) {
 
     fun scanAndConnect() {
         _connectionStatus.value = WearConnectionStatus.CONNECTING
+        // Explicit user action: this is where LAN discovery is allowed to start.
+        enableLan()
         val adapter = bluetoothManager?.adapter
         val bondedWear = runCatching {
             adapter?.bondedDevices?.firstOrNull { device ->
@@ -241,7 +277,8 @@ class WearCompanionManager(private val context: Context) {
     fun disconnect() {
         _deviceProfile.value = null
         _connectionStatus.value = WearConnectionStatus.DISCONNECTED
-        logMessage("SYS", "PAIR_CLEAR", "Phone-side watch selection cleared; LAN discovery keeps running.")
+        disableLan()
+        logMessage("SYS", "PAIR_CLEAR", "Phone-side watch selection cleared; LAN discovery stopped.")
     }
 
     fun togglePairing() {
@@ -365,5 +402,9 @@ class WearCompanionManager(private val context: Context) {
 
     private fun logMessage(direction: String, topic: String, payload: String) {
         _communicationLogs.value = (_communicationLogs.value + WearLogMessage(direction = direction, topic = topic, payload = payload)).takeLast(40)
+    }
+
+    private companion object {
+        const val KEY_LAN_ENABLED = "lan_discovery_enabled"
     }
 }

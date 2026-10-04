@@ -52,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -462,7 +463,8 @@ fun PrivacySettingsCard(
     onOpenTrash: () -> Unit,
     onWipeData: () -> Unit,
     onResetDefaults: () -> Unit,
-    onOpenPermissionsPrompt: () -> Unit = {}
+    onOpenPermissionsPrompt: () -> Unit = {},
+    preferences: MilesPreferences? = null
 ) {
     LiquidGlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -603,6 +605,20 @@ fun PrivacySettingsCard(
                 Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Review Health & Permissions Prompt", fontSize = 12.sp)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Online weather: opt-in, because it is the only MILES lookup that leaves the device by itself.
+            if (preferences != null) {
+                val userPrefs by preferences.userPreferences.collectAsState()
+                SettingRow(
+                    title = "Online Weather (Open-Meteo)",
+                    subtitle = "Off by default. When enabled, MILES sends your approximate location to open-meteo.com to show local conditions.",
+                    checked = userPrefs.onlineWeatherEnabled,
+                    onCheckedChange = { enabled -> preferences.updatePreferences { it.copy(onlineWeatherEnabled = enabled) } }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }

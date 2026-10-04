@@ -264,7 +264,7 @@ class MainActivity : ComponentActivity() {
                     AlertDialog(
                         onDismissRequest = {},
                         title = { Text("MILES needs your health data", style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) },
-                        text = { Text("MILES reads your phone's real sensors: location for GPS routes, activity recognition for steps, body sensors for heart rate, and Health Connect for steps & workouts. Android will show you each permission — you can grant or deny any of them, and change them later in MILES privacy settings.", style = MaterialTheme.typography.bodyMedium) },
+                        text = { Text("MILES reads your phone's real sensors: location for GPS routes, activity recognition for steps, body sensors for heart rate, and — only if Health Connect is available — your step count and exercise sessions, which stay on this device. Android will show you each permission — you can grant or deny any of them, and change them later in MILES privacy settings.", style = MaterialTheme.typography.bodyMedium) },
                         confirmButton = {
                             Button(onClick = {
                                 preferences.markPermissionPromptShown()
