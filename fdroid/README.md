@@ -20,8 +20,8 @@ Everything in this folder is already validated. This is the order to use it.
 
 1. **Merge the open PRs** so `main` has everything, then tag:
    ```bash
-   git tag 1.0.7
-   git push origin 1.0.7
+   git tag 1.0.9
+   git push origin 1.0.9
    ```
    F-Droid builds from **tags on the default branch**, not branches.
 
