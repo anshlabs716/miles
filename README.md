@@ -1,21 +1,23 @@
 # 🗺️ MILES
 
-<p align="center">
-  <img src="docs/app-icon.png" width="130" alt="MILES app icon">
-</p>
+<div align="center">
 
-<table>
+<img src="docs/app-icon.png" width="130" alt="MILES app icon">
+
+<table cellpadding="14">
   <tr>
-    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/1-dashboard.webp" width="88%" alt="Dashboard"><br><sub>Dashboard</sub></td>
-    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/2-journal-history.webp" width="88%" alt="Journal history"><br><sub>Journal history</sub></td>
-    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/3-trends-records.webp" width="88%" alt="Trends and records"><br><sub>Trends &amp; records</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/1-dashboard.webp" width="82%" alt="Dashboard"><br><sub>Dashboard</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/2-journal-history.webp" width="82%" alt="Journal history"><br><sub>Journal history</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/3-trends-records.webp" width="82%" alt="Trends and records"><br><sub>Trends &amp; records</sub></td>
   </tr>
   <tr>
-    <td align="center" valign="top"><img src="docs/screenshots/4-training.webp" width="88%" alt="Training workouts"><br><sub>Training</sub></td>
-    <td align="center" valign="top"><img src="docs/screenshots/5-maps-navigation.webp" width="88%" alt="Maps and navigation"><br><sub>Maps &amp; navigation</sub></td>
-    <td align="center" valign="top"><img src="docs/screenshots/6-maps-satellite.webp" width="88%" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/4-training.webp" width="82%" alt="Training workouts"><br><sub>Training</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/5-maps-navigation.webp" width="82%" alt="Maps and navigation"><br><sub>Maps &amp; navigation</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/6-maps-satellite.webp" width="82%" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
   </tr>
 </table>
+
+</div>
 
 ### A modern, customizable, privacy-focused activity tracker for Android.
 
