@@ -1,22 +1,20 @@
 # 🗺️ MILES
 
 <div align="center">
-
 <img src="docs/app-icon.png" width="130" alt="MILES app icon">
-
-<table cellpadding="22">
+<br><br>
+<table cellpadding="28">
   <tr>
-    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/1-dashboard.webp" width="74%" alt="Dashboard"><br><sub>Dashboard</sub></td>
-    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/2-journal-history.webp" width="74%" alt="Journal history"><br><sub>Journal history</sub></td>
-    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/3-trends-records.webp" width="74%" alt="Trends and records"><br><sub>Trends &amp; records</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/1-dashboard.webp" width="70%" alt="Dashboard"><br><sub>Dashboard</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/2-journal-history.webp" width="70%" alt="Journal history"><br><sub>Journal history</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/3-trends-records.webp" width="70%" alt="Trends and records"><br><sub>Trends &amp; records</sub></td>
   </tr>
   <tr>
-    <td align="center" valign="top"><img src="docs/screenshots/4-training.webp" width="74%" alt="Training workouts"><br><sub>Training</sub></td>
-    <td align="center" valign="top"><img src="docs/screenshots/5-maps-navigation.webp" width="74%" alt="Maps and navigation"><br><sub>Maps &amp; navigation</sub></td>
-    <td align="center" valign="top"><img src="docs/screenshots/6-maps-satellite.webp" width="74%" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/4-training.webp" width="70%" alt="Training workouts"><br><sub>Training</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/5-maps-navigation.webp" width="70%" alt="Maps and navigation"><br><sub>Maps &amp; navigation</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/6-maps-satellite.webp" width="70%" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
   </tr>
 </table>
-
 </div>
 
 ### A modern, customizable, privacy-focused activity tracker for Android.
