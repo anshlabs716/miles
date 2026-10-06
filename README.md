@@ -1,19 +1,19 @@
 # 🗺️ MILES
 
 <p align="center">
-  <img src="docs/miles-logo.jpg" width="120" alt="MILES logo">
+  <img src="docs/app-icon.png" width="130" alt="MILES app icon">
 </p>
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/screenshots/1-dashboard.webp" width="180" alt="Dashboard"><br><sub>Dashboard</sub></td>
-    <td align="center" width="33%"><img src="docs/screenshots/2-journal-history.webp" width="180" alt="Journal history"><br><sub>Journal history</sub></td>
-    <td align="center" width="33%"><img src="docs/screenshots/3-trends-records.webp" width="180" alt="Trends and records"><br><sub>Trends &amp; records</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/1-dashboard.webp" width="88%" alt="Dashboard"><br><sub>Dashboard</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/2-journal-history.webp" width="88%" alt="Journal history"><br><sub>Journal history</sub></td>
+    <td align="center" valign="top" width="33.33%"><img src="docs/screenshots/3-trends-records.webp" width="88%" alt="Trends and records"><br><sub>Trends &amp; records</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/4-training.webp" width="180" alt="Training workouts"><br><sub>Training</sub></td>
-    <td align="center"><img src="docs/screenshots/5-maps-navigation.webp" width="180" alt="Maps and navigation"><br><sub>Maps &amp; navigation</sub></td>
-    <td align="center"><img src="docs/screenshots/6-maps-satellite.webp" width="180" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/4-training.webp" width="88%" alt="Training workouts"><br><sub>Training</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/5-maps-navigation.webp" width="88%" alt="Maps and navigation"><br><sub>Maps &amp; navigation</sub></td>
+    <td align="center" valign="top"><img src="docs/screenshots/6-maps-satellite.webp" width="88%" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
   </tr>
 </table>
 
