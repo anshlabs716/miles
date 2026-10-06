@@ -100,13 +100,6 @@ app/build/outputs/apk/debug/app-debug.apk
 | Wear OS | **Separate project** |
 
 ## 🗺️ Roadmap
-
--More sensor support
--Better GPS filtering and route smoothing
--Health Connect completion
--Portable backup/restore
--More accessibility polish
--Continued MILES Studio development
 -Wear OS companion development
 
 ## 📄 License
