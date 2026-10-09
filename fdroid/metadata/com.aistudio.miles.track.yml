@@ -14,14 +14,14 @@ RepoType: git
 Repo: https://github.com/anshlabs716/miles
 
 Builds:
-  - versionName: 1.0.9
-    versionCode: 5
-    commit: ac2e10981ce03587d4a6a1a672522b31287adaac
+  - versionName: 1.1.0
+    versionCode: 7
+    commit: 3c61bd1111ff311d6df4eaf0ee3200bbc06e6f2a
     subdir: app
     gradle:
       - yes
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 1.0.9
-CurrentVersionCode: 5
+CurrentVersion: 1.1.0
+CurrentVersionCode: 7
