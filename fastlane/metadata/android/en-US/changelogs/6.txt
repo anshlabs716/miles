@@ -1,0 +1,3 @@
+- Fixed CSV import: parsing, map route points, steps, calories, timestamps and activity names
+- Fixed miles.backup restore for activities, routes, privacy zones, goals and preferences
+- Fixed a crash when saving a workout, caused by restored numeric preferences being read with the wrong type

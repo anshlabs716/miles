@@ -1,0 +1,6 @@
+- Satellite and hybrid map layers now use Esri World Imagery instead of the undocumented Google tile endpoint, and the on-map attribution names the real source
+- Online weather is now opt-in and off by default, so no weather request is made unless you enable it in Settings
+- The Wear OS local-network beacon no longer starts on every launch; it starts only after you pair a watch
+- Added the missing RECEIVE_BOOT_COMPLETED permission so widgets resync after a reboot
+- Health Connect now requests only steps and exercise sessions, the two records MILES reads
+- Added the missing fastlane changelog for build 4

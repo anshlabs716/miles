@@ -1,0 +1,10 @@
+- Added a Health Connect permissions rationale screen, required by Android 14+, so the permission prompt can no longer silently fail to appear
+- Fixed CSV import: parsing, map route points, steps, calories, timestamps and activity names
+- Fixed miles.backup restore for activities, routes, privacy zones, goals and preferences
+- Fixed a crash when saving a workout, caused by restored numeric preferences being read with the wrong type
+- Satellite and hybrid map layers now use Esri World Imagery instead of the undocumented Google tile endpoint, with correct attribution
+- Online weather is now opt-in and off by default
+- The Wear OS local-network beacon no longer starts on every launch; it starts only after you pair a watch
+- Added the missing RECEIVE_BOOT_COMPLETED permission so widgets resync after a reboot
+- Health Connect requests only steps and exercise sessions, the two records MILES reads
+- R8 minification and resource shrinking remain enabled

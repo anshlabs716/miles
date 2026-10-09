@@ -4,7 +4,19 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.0]
+
+### Added
+- A Health Connect permissions rationale screen, declared for `VIEW_PERMISSION_USAGE` and
+  `ACTION_SHOW_PERMISSIONS_RATIONALE`. Android 14+ requires it, and without it the Health
+  Connect permission sheet could silently fail to appear.
+- fastlane changelogs for builds 5, 6 and 7.
+
 ### Fixed
+- CSV import: parsing, map route points, steps, calories, timestamps and activity names.
+- `miles.backup` restore for activities, routes, privacy zones, goals and preferences.
+- A crash when saving a workout, caused by restored numeric preferences being read with
+  the wrong type.
 - Satellite and hybrid map layers no longer request tiles from the undocumented Google
   endpoint. They now use Esri World Imagery, and the on-map attribution names the real
   source.
