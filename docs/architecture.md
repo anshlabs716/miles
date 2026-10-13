@@ -2,8 +2,6 @@
 
 High-level structure of MILES.
 
-# Architecture
-
 This page describes the high-level structure of MILES. It is a starting
 point and is updated as the implementation evolves.
 
@@ -13,11 +11,11 @@ MILES
 
 ## Main components
 
-- `**Kotlin**`
-- `**Jetpack Compose / Material 3**`
-- `**Room**`
-- `**AndroidX**`
-- `**Health Connect**`
+- **Kotlin**
+- **Jetpack Compose / Material 3**
+- **Room**
+- **AndroidX**
+- **Health Connect**
 
 ## Data flow
 

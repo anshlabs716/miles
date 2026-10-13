@@ -2,8 +2,6 @@
 
 How to configure MILES.
 
-# Configuration
-
 Reference for configuring MILES.
 
 ## Where configuration lives

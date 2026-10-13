@@ -2,8 +2,6 @@
 
 Third-party components used by MILES.
 
-# Third-Party Dependencies
-
 This page lists the third-party components used by MILES, their role, and
 where applicable their license. See
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) for full attribution.

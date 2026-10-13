@@ -2,8 +2,6 @@
 
 Architecture decision records for MILES.
 
-# Architecture Decision Records
-
 This directory records significant architecture decisions for MILES.
 
 ## What is an ADR?
