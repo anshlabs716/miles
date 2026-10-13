@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use MILES in your work, please cite it as below."
+title: "MILES"
+type: software
+authors:
+  - family-names: "Bhatia"
+    given-names: "Ansh"
+    alias: "anshlabs716"
+repository-code: "https://github.com/anshlabs716/miles"
+license: "NOASSERTION"
+abstract: "MILES"

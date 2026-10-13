@@ -1,0 +1,23 @@
+name: Question
+description: Ask a question about MILES
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the documentation under `docs/` and search existing issues
+        before asking.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to do? Include versions and steps.
+    validations:
+      required: false
