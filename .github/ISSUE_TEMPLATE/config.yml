@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/anshlabs716/miles/tree/main/docs
+    about: Read the project documentation before opening an issue.
+  - name: Security policy
+    url: https://github.com/anshlabs716/miles/blob/main/SECURITY.md
+    about: Please report security issues privately, not in public issues.

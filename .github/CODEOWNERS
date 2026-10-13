@@ -1,0 +1,7 @@
+# Default owners for everything in the repository.
+* @anshlabs716
+
+# Documentation and community files.
+/docs/ @anshlabs716
+/.github/ @anshlabs716
+/LICENSE @anshlabs716
