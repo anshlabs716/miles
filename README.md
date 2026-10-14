@@ -20,7 +20,7 @@
 ### A modern, customizable, privacy-focused activity tracker for Android.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/STATUS-1.0.9-success?style=for-the-badge" alt="Version 1.0.9">
+  <img src="https://img.shields.io/badge/STATUS-1.1.0-success?style=for-the-badge" alt="Version 1.1.0">
   <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/JETPACK%20COMPOSE-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
 </p>
@@ -38,7 +38,7 @@
 
 **MILES** is a modern Android activity and step tracker focused on real sensor data, GPS tracking, portability, customization, and a clean UI.
 
-> **Status:** Version 1.0.9
+> **Status:** Version 1.1.0
 
 ## ✨ Features
 
@@ -107,7 +107,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 | Area | Status |
 | --- | --- |
-| Android app | **1.0.9 released** |
+| Android app | **1.1.0 released** |
 | Step tracking | Implemented |
 | GPS tracking | Implemented |
 | BLE sensors | Foundation implemented |
