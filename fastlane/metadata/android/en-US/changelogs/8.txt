@@ -1,0 +1,6 @@
+- Steps now come only from the step sensor: no more estimated steps, no steps counted during a ride
+- Activity export (GPX, TCX, KML, GeoJSON, JSON) writes a real file you can open and share
+- A recovered workout keeps its speed, pace and elevation instead of saving 0.0 km/h and 0 m climb
+- Saved max speed and best pace are measured from the recorded track
+- Heart-rate average and peak are the real sensor samples only
+- The phone's own heart-rate sensor is read now, so BODY_SENSORS is actually used
