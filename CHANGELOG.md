@@ -4,6 +4,28 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.1]
+
+### Fixed
+- Steps are now the hardware step sensor's count only. Distance is never converted into
+  a step count, so a device without a step sensor shows 0 instead of an invented number,
+  and a ride no longer reports roughly 1900 fabricated "steps".
+- Activity export (GPX, TCX, KML, GeoJSON, JSON) writes a real file through Android's
+  Storage Access Framework instead of showing a toast with a character count.
+- A recovered workout recomputes speed, pace and elevation from the saved track, so it
+  no longer saves with 0.0 km/h average speed and 0 m elevation gain.
+- Saved max speed and best pace are measured from the recorded track instead of being
+  set to 1.35x and 0.9x the average.
+- Saved heart-rate average and peak come from real sensor samples only. With no sensor
+  there is no average and no peak.
+- The phone's own optical heart-rate sensor is actually read
+  (`DeviceHeartRateSensor`), which is what `BODY_SENSORS` is for. The permission is
+  only requested on devices that have heart-rate hardware.
+
+### Added
+- Unit tests for steps, speed, elevation, best pace and heart-rate accounting
+  (`WorkoutMetricsTest`, 62 tests passing).
+
 ## [1.1.0]
 
 ### Added
