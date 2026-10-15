@@ -1,6 +1,8 @@
 package com.example.miles.ui.history
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +102,57 @@ fun ActivityDetailScreen(
 
     // Dialog states
     var showExportDialog by remember { mutableStateOf(false) }
+    // Real file export: content is prepared, then written through Android's
+    // Storage Access Framework so the user gets an actual file they can open or share.
+    var pendingExportFileName by remember { mutableStateOf("") }
+    var pendingExportContent by remember { mutableStateOf("") }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri: android.net.Uri? ->
+        if (uri == null) {
+            Toast.makeText(context, "Export cancelled", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(pendingExportContent.toByteArray(Charsets.UTF_8))
+                } ?: error("Could not open file for writing")
+            }.onSuccess {
+                Toast.makeText(context, "Saved $pendingExportFileName", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "Export failed: ${it.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+            showExportDialog = false
+        }
+    }
+
+    fun exportActivity(fileName: String, block: suspend () -> String) {
+        pendingExportFileName = fileName
+        showExportDialog = false
+        scope.launch {
+            runCatching { block() }
+                .onSuccess { content ->
+                    pendingExportContent = content
+                    // The SAF picker only runs after the content exists, so a slow
+                    // database read never leaves the user staring at an empty sheet.
+                    exportDocumentLauncher.launch(fileName)
+                }
+                .onFailure {
+                    Toast.makeText(context, "Export failed: ${it.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+        }
+    }
+
+    // A file name Android will actually accept: letters, digits, dashes only.
+    val exportBaseName = remember(activity.title) {
+        val cleaned = activity.title
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
+            .ifBlank { "activity" }
+        "miles-$cleaned"
+    }
     var showShareDialog by remember { mutableStateOf(false) }
     var showEditNotesDialog by remember { mutableStateOf(false) }
     var showCompareDialog by remember { mutableStateOf(false) }
@@ -413,65 +466,35 @@ fun ActivityDetailScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Choose an open, privacy-preserving standard format for external tools, Strava, Garmin, or backup:")
                     FilledTonalButton(
-                        onClick = {
-                            scope.launch {
-                                val gpx = repository.exportActivityAsGpx(activity.id)
-                                Toast.makeText(context, "Exported GPX (${gpx.length} chars)", Toast.LENGTH_SHORT).show()
-                                showExportDialog = false
-                            }
-                        },
+                        onClick = { exportActivity("$exportBaseName.gpx") { repository.exportActivityAsGpx(activity.id) } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("GPX (GPS Exchange Format)")
                     }
 
                     FilledTonalButton(
-                        onClick = {
-                            scope.launch {
-                                val tcx = repository.exportActivityAsTcx(activity.id)
-                                Toast.makeText(context, "Exported TCX (${tcx.length} chars)", Toast.LENGTH_SHORT).show()
-                                showExportDialog = false
-                            }
-                        },
+                        onClick = { exportActivity("$exportBaseName.tcx") { repository.exportActivityAsTcx(activity.id) } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("TCX (Garmin Training Center)")
                     }
 
                     FilledTonalButton(
-                        onClick = {
-                            scope.launch {
-                                val kml = repository.exportActivityAsKml(activity.id)
-                                Toast.makeText(context, "Exported KML (${kml.length} chars)", Toast.LENGTH_SHORT).show()
-                                showExportDialog = false
-                            }
-                        },
+                        onClick = { exportActivity("$exportBaseName.kml") { repository.exportActivityAsKml(activity.id) } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("KML (Google Earth & Maps.me)")
                     }
 
                     FilledTonalButton(
-                        onClick = {
-                            scope.launch {
-                                val geojson = repository.exportActivityAsGeoJson(activity.id)
-                                Toast.makeText(context, "Exported GeoJSON (${geojson.length} chars)", Toast.LENGTH_SHORT).show()
-                                showExportDialog = false
-                            }
-                        },
+                        onClick = { exportActivity("$exportBaseName.geojson") { repository.exportActivityAsGeoJson(activity.id) } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("GeoJSON (Open GIS Standard)")
                     }
 
                     FilledTonalButton(
-                        onClick = {
-                            scope.launch {
-                                val json = repository.exportActivityAsJson(activity.id)
-                                Toast.makeText(context, "Exported Native JSON", Toast.LENGTH_SHORT).show()
-                                showExportDialog = false
-                            }
-                        },
+                        onClick = { exportActivity("$exportBaseName.json") { repository.exportActivityAsJson(activity.id) } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Native MILES JSON (Full Telemetry)")

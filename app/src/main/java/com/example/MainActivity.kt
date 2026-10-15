@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
+import com.example.miles.engine.DeviceHeartRateSensor
 import com.example.miles.engine.DeviceManager
 import com.example.miles.engine.MediaIntegration
 import com.example.miles.engine.MoveReminderManager
@@ -100,6 +101,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var pedometerManager: PedometerManager
     private lateinit var moveReminderManager: MoveReminderManager
     private lateinit var healthConnectManager: HealthConnectManager
+    private lateinit var deviceHeartRate: DeviceHeartRateSensor
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,6 +117,7 @@ class MainActivity : ComponentActivity() {
         pedometerManager = PedometerManager(this, preferences)
         moveReminderManager = MoveReminderManager(this, preferences)
         healthConnectManager = HealthConnectManager(this)
+        deviceHeartRate = DeviceHeartRateSensor(this)
         moveReminderManager.scheduleNextReminder()
         com.example.miles.widget.MilesWidgetSyncReceiver.schedulePeriodicSync(this)
         com.example.miles.widget.MilesWidgetSyncReceiver.syncWidgetsNow(this)
@@ -186,7 +189,9 @@ class MainActivity : ComponentActivity() {
                     add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) add(Manifest.permission.ACTIVITY_RECOGNITION)
-                    add(Manifest.permission.BODY_SENSORS)
+                    // Body sensors are only asked for when this device actually has a
+                    // heart-rate sensor to read, so the permission is never dead weight.
+                    if (deviceHeartRate.hasHardware()) add(Manifest.permission.BODY_SENSORS)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT) }
                 }.toTypedArray()
             }
@@ -212,6 +217,20 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(userPrefs.sensorRefreshRateMs, userPrefs.gpsSensorEnabled) {
                 if (locationTracker.hasLocationPermission()) locationTracker.startTracking(userPrefs.sensorRefreshRateMs, userPrefs.gpsSensorEnabled) { point ->
                     if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
+                }
+            }
+
+            // Real heart rate: the phone's own optical sensor plus any BLE strap or
+            // watch reading, fed into the workout when one is actually streaming.
+            LaunchedEffect(userPrefs.heartRateSensorEnabled) {
+                if (userPrefs.heartRateSensorEnabled) deviceHeartRate.start() else deviceHeartRate.stop()
+            }
+            LaunchedEffect(Unit) {
+                launch {
+                    deviceHeartRate.readingBpm.collect { bpm -> if (bpm != null) smartEngine.recordHeartRate(bpm) }
+                }
+                launch {
+                    deviceManager.heartRateBpm.collect { bpm -> if (bpm != null) smartEngine.recordHeartRate(bpm) }
                 }
             }
 
@@ -370,5 +389,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         if (::pedometerManager.isInitialized) pedometerManager.stopTracking()
         if (::locationTracker.isInitialized) locationTracker.stopTracking()
+        if (::deviceHeartRate.isInitialized) deviceHeartRate.stop()
     }
 }

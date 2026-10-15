@@ -120,6 +120,9 @@ class SmartTrackingEngine(
     private var ghostActivity: ActivityEntity? = null
     private var lastMilestoneKm: Int = 0
 
+    // Real heart-rate samples seen during this workout (never invented).
+    private val heartRateTracker = HeartRateTracker()
+
     // Configurable intervals: Default 100ms for counter, 3000ms (3s) for telemetry
     var counterIntervalMs: Long = 100L
         set(value) {
@@ -193,6 +196,7 @@ class SmartTrackingEngine(
         lastMovementTimestamp = startTimestamp
         lastMilestoneKm = 0
         lastFilteredPoint = null
+        heartRateTracker.reset()
 
         // Real workout starts strictly at 0.00 distance, 0 elapsed, 0 steps, NO simulation!
         _liveStats.value = LiveWorkoutStats(
@@ -251,7 +255,19 @@ class SmartTrackingEngine(
             ?: "${current.activityType.displayName} ${java.text.SimpleDateFormat("MMM d, HH:mm", Locale.US).format(java.util.Date(startTimestamp))}"
 
         val finalCalories = calculateCalories(current.activityType, current.elapsedSeconds, current.distanceMeters, current.stepCount).coerceAtLeast(current.calories)
-        val finalSteps = if (current.stepCount > 0) current.stepCount else (current.distanceMeters / 0.76).toInt()
+        // Steps are the sensor's own count only; distance is never turned into steps.
+        val finalSteps = WorkoutMetrics.stepsFor(current.activityType, current.stepCount)
+        // Real derived metrics from the recorded track, for recovery restores and
+        // for workouts where the live counters never had a chance to fill in.
+        val savedPoints = current.points
+        val derivedMaxSpeed = if (savedPoints.size >= 2) WorkoutMetrics.maxSpeedKmh(savedPoints) else current.avgSpeedKmh
+        val derivedBestPace = WorkoutMetrics.bestPaceSecPerKm(savedPoints, current.distanceMeters)
+            ?: if (current.avgPaceSecPerKm > 0.0) current.avgPaceSecPerKm else 0.0
+        val derivedElevation = if (current.elevationGainM <= 0.0 && current.elevationLossM <= 0.0) {
+            WorkoutMetrics.elevationProfile(savedPoints)
+        } else {
+            current.elevationGainM to current.elevationLossM
+        }
 
         val entity = ActivityEntity(
             id = UUID.randomUUID().toString(),
@@ -263,14 +279,15 @@ class SmartTrackingEngine(
             distanceMeters = current.distanceMeters,
             steps = finalSteps,
             avgPaceSecPerKm = current.avgPaceSecPerKm,
-            bestPaceSecPerKm = (current.avgPaceSecPerKm * 0.9).coerceAtLeast(180.0),
-            avgSpeedKmh = current.avgSpeedKmh,
-            maxSpeedKmh = (current.avgSpeedKmh * 1.35).coerceAtLeast(current.avgSpeedKmh),
-            elevationGainM = current.elevationGainM,
-            elevationLossM = current.elevationLossM,
+            bestPaceSecPerKm = derivedBestPace,
+            avgSpeedKmh = if (current.avgSpeedKmh > 0.0) current.avgSpeedKmh
+                else WorkoutMetrics.avgSpeedKmh(current.distanceMeters, current.elapsedMillis),
+            maxSpeedKmh = maxOf(derivedMaxSpeed, current.avgSpeedKmh),
+            elevationGainM = derivedElevation.first,
+            elevationLossM = derivedElevation.second,
             calories = finalCalories,
-            avgHeartRate = if (current.heartRate > 0) current.heartRate else 0,
-            maxHeartRate = if (current.heartRate > 0) (current.heartRate + 20) else 0,
+            avgHeartRate = realHeartRateAverage(),
+            maxHeartRate = realHeartRatePeak(),
             routePointsJson = MilesRepository.pointsToJson(current.points),
             waypointsJson = MilesRepository.waypointsToJson(current.waypoints),
             notes = notes,
@@ -496,8 +513,9 @@ class SmartTrackingEngine(
         val currentSpeedKmh = effectiveCurrentSpeedKmh
         val currentPaceSec = effectiveCurrentPaceSec
 
-        val estimatedSteps = (totalDist / 0.76).toInt()
-        val stepCount = maxOf(current.stepCount, estimatedSteps)
+        // Steps come from the hardware step sensor only. Distance is never turned
+        // into a step count: no sensor means 0 steps, and a ride is not steps.
+        val stepCount = WorkoutMetrics.stepsFor(current.activityType, current.stepCount)
         val calories = when (current.activityType) {
             ActivityType.RUNNING -> (totalDist * 0.065).toInt()
             ActivityType.CYCLING -> (totalDist * 0.035).toInt()
@@ -732,6 +750,24 @@ class SmartTrackingEngine(
         _liveStats.value = _liveStats.value.copy(heartRate = bpm)
     }
 
+    /**
+     * Real heart rate from a real sensor: the phone's own optical sensor, a BLE
+     * chest strap, or the paired watch. Samples are counted so the saved workout
+     * reports the true average and peak instead of an invented number.
+     */
+    fun recordHeartRate(bpm: Int) {
+        if (bpm <= 0) return
+        val clamped = bpm.coerceIn(20, 240)
+        heartRateTracker.record(clamped)
+        _liveStats.value = _liveStats.value.copy(heartRate = clamped)
+    }
+
+    /** Average of the heart-rate samples actually recorded, 0 when there were none. */
+    fun realHeartRateAverage(): Int = heartRateTracker.average()
+
+    /** Highest sample actually recorded, 0 when there were none. */
+    fun realHeartRatePeak(): Int = heartRateTracker.peak()
+
     // Telemetry and auto-save loop: Ticks at telemetryIntervalMs (default 3 seconds)
     private fun startTelemetryLoop() {
         telemetryJob?.cancel()
@@ -822,11 +858,23 @@ class SmartTrackingEngine(
         val points = MilesRepository.parsePoints(ptsJson)
         val waypoints = MilesRepository.parseWaypoints(wpJson)
 
+        // The saved points are the record of what actually happened, so speed and
+        // climb are recomputed from them instead of restarting at zero. This is
+        // what makes a recovered workout keep its average speed and elevation.
+        val restoredDistance = if (dist > 0.0) dist else WorkoutMetrics.distanceFromPoints(points)
+        val (gain, loss) = WorkoutMetrics.elevationProfile(points)
+        val restoredAvgSpeed = if (dist > 0.0) WorkoutMetrics.avgSpeedKmh(dist, elapsed) else 0.0
+
         _liveStats.value = LiveWorkoutStats(
             state = TrackingState.PAUSED, // Safe recovery state
             activityType = type,
             elapsedMillis = elapsed,
-            distanceMeters = dist,
+            distanceMeters = restoredDistance,
+            avgSpeedKmh = restoredAvgSpeed,
+            avgPaceSecPerKm = if (restoredDistance > 20.0 && elapsed > 0) (elapsed / 1000.0) / (restoredDistance / 1000.0) else 0.0,
+            elevationGainM = gain,
+            elevationLossM = loss,
+            currentElevationM = points.lastOrNull()?.altitude ?: 0.0,
             stepCount = steps,
             points = points,
             waypoints = waypoints,
