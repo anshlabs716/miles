@@ -70,6 +70,7 @@ import com.example.miles.ui.map.MapStyleMode
 import com.example.miles.ui.map.MilesMapCanvas
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
+import com.example.miles.util.formatPaceSecPerKm
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -355,7 +356,7 @@ fun ActivityDetailScreen(
                     ) {
                         MetricDetailItem(label = "DISTANCE", value = "${(activity.distanceMeters / 1000.0).format(2)} km")
                         MetricDetailItem(label = "DURATION", value = "${activity.durationSeconds / 60}m ${activity.durationSeconds % 60}s")
-                        MetricDetailItem(label = "AVG PACE", value = "${(activity.avgPaceSecPerKm / 60).toInt()}'${(activity.avgPaceSecPerKm % 60).toInt()}\"/km")
+                        MetricDetailItem(label = "AVG PACE", value = "${formatPaceSecPerKm(activity.avgPaceSecPerKm)}/km")
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -364,7 +365,7 @@ fun ActivityDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        MetricDetailItem(label = "BEST PACE", value = "${(activity.bestPaceSecPerKm / 60).toInt()}'${(activity.bestPaceSecPerKm % 60).toInt()}\"/km")
+                        MetricDetailItem(label = "BEST PACE", value = "${formatPaceSecPerKm(activity.bestPaceSecPerKm)}/km")
                         MetricDetailItem(label = "AVG SPEED", value = "${activity.avgSpeedKmh.format(1)} km/h")
                         MetricDetailItem(label = "MAX SPEED", value = "${activity.maxSpeedKmh.format(1)} km/h")
                     }
@@ -555,8 +556,8 @@ fun ActivityDetailScreen(
                                     )
                                     ComparisonMetricRow(
                                         label = "Pace",
-                                        current = "${(activity.avgPaceSecPerKm / 60).toInt()}'${(activity.avgPaceSecPerKm % 60).toInt()}\"/km",
-                                        other = "${(baseline.avgPaceSecPerKm / 60).toInt()}'${(baseline.avgPaceSecPerKm % 60).toInt()}\"/km",
+                                        current = "${formatPaceSecPerKm(activity.avgPaceSecPerKm)}/km",
+                                        other = "${formatPaceSecPerKm(baseline.avgPaceSecPerKm)}/km",
                                         diff = "${(activity.avgPaceSecPerKm - baseline.avgPaceSecPerKm).toInt()}s/km"
                                     )
                                     ComparisonMetricRow(

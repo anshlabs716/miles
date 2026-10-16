@@ -49,6 +49,7 @@ import com.example.miles.data.repository.format
 import com.example.miles.ui.map.MapStyleMode
 import com.example.miles.ui.map.MilesMapCanvas
 import com.example.miles.ui.theme.LiquidGlassCard
+import com.example.miles.util.formatPaceSecPerKm
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -161,7 +162,7 @@ fun ShareDesignerDialog(
                             )
                             if (showPace) {
                                 Text(
-                                    text = "${(activity.avgPaceSecPerKm / 60).toInt()}'${(activity.avgPaceSecPerKm % 60).toInt()}\"/km",
+                                    text = "${formatPaceSecPerKm(activity.avgPaceSecPerKm)}/km",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color(0xFF00E5FF)
                                 )

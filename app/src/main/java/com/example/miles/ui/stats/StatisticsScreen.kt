@@ -66,6 +66,7 @@ import com.example.miles.data.repository.format
 import com.example.miles.engine.StreakCalculator
 import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
+import com.example.miles.util.formatPaceSecPerKm
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -607,7 +608,7 @@ fun StatisticsScreen(
                     val pace = act.avgPaceSecPerKm
                     RecordItem(
                         title = "Fastest Pace",
-                        value = "${(pace / 60).toInt()}'${(pace % 60).toInt()}\" /km",
+                        value = "${formatPaceSecPerKm(pace)} /km",
                         subtitle = act.title,
                         icon = Icons.Default.Speed,
                         color = MaterialTheme.colorScheme.secondary

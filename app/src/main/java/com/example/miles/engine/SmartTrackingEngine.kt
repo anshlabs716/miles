@@ -10,6 +10,7 @@ import com.example.miles.data.model.SavedRouteEntity
 import com.example.miles.data.model.Waypoint
 import com.example.miles.data.model.WorkoutInterval
 import com.example.miles.data.repository.MilesRepository
+import com.example.miles.util.formatPaceSecPerKm
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -87,6 +88,19 @@ data class LiveWorkoutStats(
     val elapsedSeconds: Long get() = elapsedMillis / 1000L
 }
 
+/**
+ * What the phone's own heart-rate sensor is doing, kept outside [LiveWorkoutStats]
+ * so a workout restart cannot wipe it. The HUD uses this to say why there is no
+ * reading instead of claiming no sensor is connected when one is sitting there
+ * waiting for its permission.
+ */
+data class HeartRateSensorState(
+    /** A sensor exists here and MILES is watching it. */
+    val watching: Boolean = false,
+    /** Android has granted the permission that guards that sensor. */
+    val permissionGranted: Boolean = false
+)
+
 sealed class TrackingEvent {
     data class MilestoneReached(val title: String, val message: String) : TrackingEvent()
     data class AutoPauseTriggered(val isPaused: Boolean) : TrackingEvent()
@@ -105,6 +119,15 @@ class SmartTrackingEngine(
 
     private val _liveStats = MutableStateFlow(LiveWorkoutStats())
     val liveStats: StateFlow<LiveWorkoutStats> = _liveStats.asStateFlow()
+
+    // Deliberately not part of LiveWorkoutStats: a workout reset must not lose it.
+    private val _heartRateSensorState = MutableStateFlow(HeartRateSensorState())
+    val heartRateSensorState: StateFlow<HeartRateSensorState> = _heartRateSensorState.asStateFlow()
+
+    /** Published by MainActivity so the HUD can explain a missing heart-rate reading. */
+    fun setHeartRateSensorState(watching: Boolean, permissionGranted: Boolean) {
+        _heartRateSensorState.value = HeartRateSensorState(watching, permissionGranted)
+    }
 
     private val _events = MutableSharedFlow<TrackingEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<TrackingEvent> = _events.asSharedFlow()
@@ -928,12 +951,7 @@ class SmartTrackingEngine(
         }
     }
 
-    fun formatPace(secPerKm: Double): String {
-        if (secPerKm <= 0.0 || secPerKm > 3600.0) return "--:--"
-        val mins = (secPerKm / 60).toInt()
-        val secs = (secPerKm % 60).toInt()
-        return String.format(Locale.US, "%d'%02d\"", mins, secs)
-    }
+    fun formatPace(secPerKm: Double): String = formatPaceSecPerKm(secPerKm)
 
     fun refreshTelemetry() {
         _liveStats.value = _liveStats.value.copy(

@@ -49,6 +49,7 @@ import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
 import com.example.miles.ui.theme.LiquidGlassCard
+import com.example.miles.util.formatPaceSecPerKm
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -291,7 +292,7 @@ fun HistoryActivityItem(
             ) {
                 StatColumn(label = "DISTANCE", value = "${(activity.distanceMeters / 1000.0).format(2)} km")
                 StatColumn(label = "TIME", value = "${activity.durationSeconds / 60}m ${activity.durationSeconds % 60}s")
-                StatColumn(label = "AVG PACE", value = "${(activity.avgPaceSecPerKm / 60).toInt()}'${(activity.avgPaceSecPerKm % 60).toInt()}\"/km")
+                StatColumn(label = "AVG PACE", value = "${formatPaceSecPerKm(activity.avgPaceSecPerKm)}/km")
                 StatColumn(label = "ELEVATION", value = "+${activity.elevationGainM.toInt()} m")
             }
 

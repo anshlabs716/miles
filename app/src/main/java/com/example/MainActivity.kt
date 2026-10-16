@@ -67,6 +67,7 @@ import com.example.miles.health.HealthConnectConnectionState
 import com.example.miles.health.HealthConnectAvailability
 import com.example.miles.health.HealthConnectManager
 import com.example.miles.engine.TrackingState
+import com.example.miles.engine.heartRatePermission
 import com.example.miles.ui.dashboard.DashboardScreen
 import com.example.miles.ui.devices.DevicesScreen
 import com.example.miles.ui.history.ActivityDetailScreen
@@ -81,6 +82,7 @@ import com.example.miles.ui.tools.ToolsDiagnosticsScreen
 import com.example.miles.ui.training.ProgressiveTrainingScreen
 import com.example.miles.ui.workout.WorkoutHudScreen
 import com.example.miles.wear.WearCompanionManager
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 enum class MilesNavigationTab(val label: String, val icon: ImageVector) {
@@ -158,6 +160,9 @@ class MainActivity : ComponentActivity() {
                 val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
                 val activityGranted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
                 if (activityGranted) TrackingForegroundService.start(this@MainActivity)
+                // The heart-rate sensor registers only once its permission is granted, and the
+                // first attempt runs before this dialog has been answered — try again now.
+                if (userPrefs.heartRateSensorEnabled) deviceHeartRate.recheckPermission()
                 if (locationGranted) {
                     locationTracker.startTracking(intervalMs = userPrefs.sensorRefreshRateMs, gpsEnabled = userPrefs.gpsSensorEnabled) { point ->
                         if (smartEngine.liveStats.value.state == TrackingState.RECORDING) smartEngine.processLocation(point)
@@ -191,7 +196,8 @@ class MainActivity : ComponentActivity() {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) add(Manifest.permission.ACTIVITY_RECOGNITION)
                     // Body sensors are only asked for when this device actually has a
                     // heart-rate sensor to read, so the permission is never dead weight.
-                    if (deviceHeartRate.hasHardware()) add(Manifest.permission.BODY_SENSORS)
+                    // Android 16 wants the granular health permission instead of BODY_SENSORS.
+                    if (deviceHeartRate.hasHardware()) add(heartRatePermission())
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT) }
                 }.toTypedArray()
             }
@@ -224,6 +230,22 @@ class MainActivity : ComponentActivity() {
             // watch reading, fed into the workout when one is actually streaming.
             LaunchedEffect(userPrefs.heartRateSensorEnabled) {
                 if (userPrefs.heartRateSensorEnabled) deviceHeartRate.start() else deviceHeartRate.stop()
+            }
+            // What the heart-rate sensor situation is, so the HUD can tell "this phone
+            // has no sensor" apart from "permission still missing".
+            LaunchedEffect(Unit) {
+                combine(
+                    deviceHeartRate.supported,
+                    deviceHeartRate.permissionGranted,
+                    preferences.userPreferences
+                ) { supported, granted, prefs ->
+                    Triple(supported, granted, prefs.heartRateSensorEnabled)
+                }.collect { (supported, granted, enabled) ->
+                    smartEngine.setHeartRateSensorState(
+                        watching = enabled && supported,
+                        permissionGranted = granted
+                    )
+                }
             }
             LaunchedEffect(Unit) {
                 launch {

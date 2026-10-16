@@ -91,6 +91,7 @@ fun WorkoutHudScreen(
     onBack: () -> Unit = {}
 ) {
     val liveStats by smartEngine.liveStats.collectAsState()
+    val hrSensorState by smartEngine.heartRateSensorState.collectAsState()
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { 3 })
 
@@ -452,7 +453,7 @@ fun WorkoutHudScreen(
                         formatPace = { smartEngine.formatPace(it) },
                         mapStyle = mapStyle
                     )
-                    1 -> BiometricsPage(liveStats = liveStats)
+                    1 -> BiometricsPage(liveStats = liveStats, hrSensorState = hrSensorState)
                     2 -> GhostAndSplitsPage(
                         liveStats = liveStats,
                         smartEngine = smartEngine,
@@ -856,7 +857,10 @@ fun PrimaryHudPage(
 }
 
 @Composable
-fun BiometricsPage(liveStats: com.example.miles.engine.LiveWorkoutStats) {
+fun BiometricsPage(
+    liveStats: com.example.miles.engine.LiveWorkoutStats,
+    hrSensorState: com.example.miles.engine.HeartRateSensorState
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -900,7 +904,11 @@ fun BiometricsPage(liveStats: com.example.miles.engine.LiveWorkoutStats) {
                                         liveStats.heartRate < 175 -> "Zone 4 • Threshold"
                                         else -> "Zone 5 • Maximum Effort"
                                     }
-                                } else "No HRM sensor connected",
+                                } else when {
+                                    hrSensorState.watching && !hrSensorState.permissionGranted -> "Heart rate permission needed"
+                                    hrSensorState.watching -> "Waiting for heart rate"
+                                    else -> "No HRM sensor connected"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (liveStats.heartRate > 0) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
