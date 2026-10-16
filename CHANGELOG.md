@@ -4,6 +4,22 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.2]
+
+### Fixed
+- Heart rate on Android 16 (targeting SDK 36): `Sensor.TYPE_HEART_RATE` is no longer
+  covered by `BODY_SENSORS` there, so the phone's optical sensor could not be read even
+  after the permission was granted. MILES now declares and requests
+  `android.permission.health.READ_HEART_RATE` on Android 16 and `BODY_SENSORS` below,
+  with `maxSdkVersion="35"` on the legacy permission. The sensor is also re-checked
+  after the permission dialog is answered, so it registers as soon as it is granted.
+- The workout Biometrics tab says "Heart rate permission needed" or "Waiting for
+  heart rate" instead of "No HRM sensor connected" when a sensor exists but has not
+  produced a reading yet.
+- Pace now pads its seconds everywhere it is shown: 4'03"/km instead of 4'3"/km.
+  All screens share one formatter (`formatPaceSecPerKm`), and an unknown pace reads
+  `--:--` rather than a meaningless `0'00"`.
+
 ## [1.1.1]
 
 ### Fixed

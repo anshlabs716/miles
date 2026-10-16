@@ -1,0 +1,3 @@
+- Fixed heart rate on Android 16: the phone's optical sensor now uses the new android.permission.health.READ_HEART_RATE permission, since BODY_SENSORS no longer covers it there (BODY_SENSORS is kept for Android 15 and older)
+- The workout screen now says "Heart rate permission needed" or "Waiting for heart rate" instead of claiming no sensor is connected
+- Pace is shown with padded seconds everywhere: 4'03"/km instead of 4'3"/km
