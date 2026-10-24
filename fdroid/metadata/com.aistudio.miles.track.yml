@@ -3,6 +3,8 @@ Categories:
   - Workout
 License: GPL-3.0-only
 AuthorName: Ansh
+AntiFeatures:
+  - NonFreeNet
 SourceCode: https://github.com/anshlabs716/miles
 IssueTracker: https://github.com/anshlabs716/miles/issues
 Changelog: https://github.com/anshlabs716/miles/blob/main/CHANGELOG.md
