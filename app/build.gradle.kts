@@ -7,15 +7,15 @@ plugins {
 
 android {
   namespace = "com.example"
-  // Plain API 36 (not the 36.1 minor release) so distro builders such as
-  // F-Droid only need the standard Android 16 SDK installed.
-  compileSdk = 36
+  // Plain API 37 (not the 37.x minor releases) so distro builders such as
+  // F-Droid only need the standard Android 17 SDK installed.
+  compileSdk = 37
   defaultConfig {
     applicationId = "com.aistudio.miles.track"
     minSdk = 26
-    targetSdk = 36
-    versionCode = 9
-    versionName = "1.1.2"
+    targetSdk = 37
+    versionCode = 10
+    versionName = "1.1.3"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
   // Release signing is optional: distro builders (F-Droid) and fresh clones have

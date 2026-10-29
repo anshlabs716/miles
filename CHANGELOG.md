@@ -4,6 +4,13 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.3]
+
+### Changed
+- Targets API 37 (Android 17). `compileSdk` and `targetSdk` are bumped from 36 to 37 so
+  MILES builds and runs against the Android 17 SDK. No behaviour changes are expected
+  on older systems; `minSdk` stays at 26.
+
 ## [1.1.2]
 
 ### Fixed
