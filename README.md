@@ -130,52 +130,6 @@ miles/
 ├── .gitignore
 ├── .markdownlint-cli2.jsonc
 ├── .run/
-├── app/
-│   ├── .gitignore
-│   ├── build.gradle.kts
-│   ├── proguard-rules.pro
-│   ├── src/
-│   │   ├── androidTest/
-│   │   ├── main/
-│   │   ├── test/
-├── build.gradle.kts
-├── CHANGELOG.md
-├── CITATION.cff
-├── CODE_OF_CONDUCT.md
-├── COMPATIBILITY.md
-├── CONTRIBUTING.md
-├── DATA_EXPORT.md
-├── docs/
-├── fastlane/
-├── fdroid/
-├── gradle/
-├── gradle.properties
-├── gradlew
-├── gradlew.bat
-├── LICENSE
-├── local.properties.example
-├── metadata.json
-├── PRIVACY.md
-├── README.md
-├── RELEASE_PROCESS.md
-├── SECURITY.md
-├── settings.gradle.kts
-├── SUPPORT.md
-├── THIRD_PARTY_NOTICES.md
-```
-
----
-
-## 📁 Project Files
-
-```text
-miles/
-├── .editorconfig
-├── .gitattributes
-├── .github/
-├── .gitignore
-├── .markdownlint-cli2.jsonc
-├── .run/
 ├── CHANGELOG.md
 ├── CITATION.cff
 ├── CODE_OF_CONDUCT.md
