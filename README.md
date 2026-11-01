@@ -127,22 +127,29 @@ miles/
 ├── .editorconfig
 ├── .gitattributes
 ├── .github/
+│   ├── CODEOWNERS
+│   ├── CONTRIBUTING.md
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml
+│   │   ├── config.yml
+│   │   ├── feature_request.yml
+│   │   └── question.yml
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── release.yml
+│   └── workflows/
+│       ├── android-build.yml
+│       ├── android-ci.yml
+│       ├── android-tests.yml
+│       ├── ci.yml
+│       ├── dependency-review.yml
+│       ├── links.yml
+│       ├── markdown-lint.yml
+│       ├── release.yml
+│       └── security.yml
 ├── .gitignore
 ├── .markdownlint-cli2.jsonc
 ├── .run/
-├── CHANGELOG.md
-├── CITATION.cff
-├── CODE_OF_CONDUCT.md
-├── COMPATIBILITY.md
-├── CONTRIBUTING.md
-├── DATA_EXPORT.md
-├── LICENSE
-├── PRIVACY.md
-├── README.md
-├── RELEASE_PROCESS.md
-├── SECURITY.md
-├── SUPPORT.md
-├── THIRD_PARTY_NOTICES.md
+│   └── README.md
 ├── app/
 │   ├── .gitignore
 │   ├── build.gradle.kts
@@ -152,16 +159,75 @@ miles/
 │       ├── main/
 │       └── test/
 ├── build.gradle.kts
+├── CHANGELOG.md
+├── CITATION.cff
+├── CODE_OF_CONDUCT.md
+├── COMPATIBILITY.md
+├── CONTRIBUTING.md
+├── DATA_EXPORT.md
 ├── docs/
+│   ├── accessibility.md
+│   ├── adr/
+│   │   └── README.md
+│   ├── app-icon.png
+│   ├── architecture.md
+│   ├── backup-and-restore.md
+│   ├── bluetooth-sensors.md
+│   ├── building.md
+│   ├── compatibility.md
+│   ├── configuration.md
+│   ├── data-storage.md
+│   ├── dependencies.md
+│   ├── development.md
+│   ├── faq.md
+│   ├── fixtures/
+│   │   └── README.md
+│   ├── health-connect.md
+│   ├── import-export.md
+│   ├── index.md
+│   ├── location-tracking.md
+│   ├── permissions.md
+│   ├── privacy.md
+│   ├── releasing.md
+│   ├── screenshots/
+│   │   ├── 1-dashboard.webp
+│   │   ├── 2-journal-history.webp
+│   │   ├── 3-trends-records.webp
+│   │   ├── 4-training.webp
+│   │   ├── 5-maps-navigation.webp
+│   │   ├── 6-maps-satellite.webp
+│   │   └── README.md
+│   ├── sensors.md
+│   ├── test-matrix.md
+│   ├── test-plan.md
+│   ├── testing.md
+│   ├── third-party-dependencies.md
+│   └── troubleshooting.md
 ├── fastlane/
+│   └── metadata/
+│       └── android/
 ├── fdroid/
+│   ├── metadata/
+│   │   └── com.aistudio.miles.track.yml
+│   └── README.md
 ├── gradle/
+│   ├── libs.versions.toml
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
 ├── gradle.properties
 ├── gradlew
 ├── gradlew.bat
+├── LICENSE
 ├── local.properties.example
 ├── metadata.json
-└── settings.gradle.kts
+├── PRIVACY.md
+├── README.md
+├── RELEASE_PROCESS.md
+├── SECURITY.md
+├── settings.gradle.kts
+├── SUPPORT.md
+└── THIRD_PARTY_NOTICES.md
 ```
 
 ---
