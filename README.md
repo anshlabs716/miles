@@ -166,6 +166,52 @@ miles/
 
 ---
 
+## 📁 Project Files
+
+```text
+miles/
+├── .editorconfig
+├── .gitattributes
+├── .github/
+├── .gitignore
+├── .markdownlint-cli2.jsonc
+├── .run/
+├── CHANGELOG.md
+├── CITATION.cff
+├── CODE_OF_CONDUCT.md
+├── COMPATIBILITY.md
+├── CONTRIBUTING.md
+├── DATA_EXPORT.md
+├── LICENSE
+├── PRIVACY.md
+├── README.md
+├── RELEASE_PROCESS.md
+├── SECURITY.md
+├── SUPPORT.md
+├── THIRD_PARTY_NOTICES.md
+├── app/
+│   ├── .gitignore
+│   ├── build.gradle.kts
+│   ├── proguard-rules.pro
+│   └── src/
+│       ├── androidTest/
+│       ├── main/
+│       └── test/
+├── build.gradle.kts
+├── docs/
+├── fastlane/
+├── fdroid/
+├── gradle/
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+├── local.properties.example
+├── metadata.json
+└── settings.gradle.kts
+```
+
+---
+
 ## 📄 License
 
 **GPLv3**
