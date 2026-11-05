@@ -558,6 +558,20 @@ fun RouteBuilderScreen(
                                         Toast.makeText(context, "Add at least 2 points to start navigation", Toast.LENGTH_SHORT).show()
                                     } else {
                                         isNavigatingLive = true
+                                        activeNavRouteName = if (routeName.isNotBlank()) routeName else "Custom Planned Route"
+                                        // Hand the planned route to the caller so the tracking engine
+                                        // actually receives it (setNavigationRoute), instead of only
+                                        // flipping the local banner on.
+                                        onStartNavigation?.invoke(
+                                            SavedRouteEntity(
+                                                title = activeNavRouteName,
+                                                name = activeNavRouteName,
+                                                description = routeDescription,
+                                                distanceMeters = totalDistanceMeters,
+                                                routePointsJson = MilesRepository.pointsToJson(builderPoints),
+                                                waypointsJson = MilesRepository.waypointsToJson(builderWaypoints)
+                                            )
+                                        )
                                         Toast.makeText(context, "Turn-by-turn navigation started", Toast.LENGTH_SHORT).show()
                                     }
                                 },
@@ -697,6 +711,9 @@ fun RouteBuilderScreen(
                                                 activeNavRouteName = route.name
                                                 selectedTabIndex = 0
                                                 isNavigatingLive = true
+                                                // Pass the saved route to the tracking engine, matching
+                                                // the callback MainActivity supplies.
+                                                onStartNavigation?.invoke(route)
                                                 Toast.makeText(context, "Starting navigation on ${route.name}", Toast.LENGTH_SHORT).show()
                                             },
                                             shape = RoundedCornerShape(12.dp)

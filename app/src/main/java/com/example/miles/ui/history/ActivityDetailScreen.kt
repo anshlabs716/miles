@@ -63,6 +63,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.miles.data.local.DistanceUnit
+import com.example.miles.data.local.fromMeters
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.repository.MilesRepository
 import com.example.miles.data.repository.format
@@ -82,6 +84,7 @@ import java.util.Locale
 fun ActivityDetailScreen(
     activity: ActivityEntity,
     repository: MilesRepository,
+    unit: DistanceUnit = DistanceUnit.METRIC,
     onBack: () -> Unit,
     onSetAsGhostReference: (ActivityEntity) -> Unit,
     onDeleted: () -> Unit
@@ -354,7 +357,7 @@ fun ActivityDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        MetricDetailItem(label = "DISTANCE", value = "${(activity.distanceMeters / 1000.0).format(2)} km")
+                        MetricDetailItem(label = "DISTANCE", value = "${unit.fromMeters(activity.distanceMeters).format(2)} ${unit.symbol}")
                         MetricDetailItem(label = "DURATION", value = "${activity.durationSeconds / 60}m ${activity.durationSeconds % 60}s")
                         MetricDetailItem(label = "AVG PACE", value = "${formatPaceSecPerKm(activity.avgPaceSecPerKm)}/km")
                     }
@@ -544,9 +547,9 @@ fun ActivityDetailScreen(
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     ComparisonMetricRow(
                                         label = "Distance",
-                                        current = "${(activity.distanceMeters / 1000.0).format(2)} km",
-                                        other = "${(baseline.distanceMeters / 1000.0).format(2)} km",
-                                        diff = "${((activity.distanceMeters - baseline.distanceMeters) / 1000.0).format(2)} km"
+                                        current = "${unit.fromMeters(activity.distanceMeters).format(2)} ${unit.symbol}",
+                                        other = "${unit.fromMeters(baseline.distanceMeters).format(2)} ${unit.symbol}",
+                                        diff = "${unit.fromMeters(activity.distanceMeters - baseline.distanceMeters).format(2)} ${unit.symbol}"
                                     )
                                     ComparisonMetricRow(
                                         label = "Duration",

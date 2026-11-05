@@ -41,6 +41,10 @@ enum class DistanceUnit(val label: String, val paceLabel: String, val symbol: St
     IMPERIAL("Miles (mi)", "min/mi", "mi")
 }
 
+/** Metres → the value shown in this unit (km for metric, miles for imperial). */
+fun DistanceUnit.fromMeters(meters: Double): Double =
+    if (this == DistanceUnit.METRIC) meters / 1000.0 else meters * 0.000621371
+
 enum class ColorVisionMode(val label: String, val description: String) {
     NORMAL("Normal Vision", "Standard vibrant color reproduction"),
     PROTANOPIA("Protanopia", "Red-weak deficiency (enhanced cyan & amber contrast)"),
@@ -81,6 +85,9 @@ data class UserPreferences(
     val hasCompletedSetup: Boolean = false,
     val healthConnectFirstBootHandled: Boolean = false,
     val permissionPromptShown: Boolean = false,
+    // "Not Now" on the battery-optimisation dialog is remembered so it stops reappearing
+    // on every cold start and rotation.
+    val batteryPromptDeclined: Boolean = false,
     val userName: String = "",
     val primarySport: String = "RUNNING",
     val dailyStepGoal: Int = 8000,
@@ -251,6 +258,7 @@ class MilesPreferences(context: Context) {
         val hasSetup = prefBoolean("has_completed_setup", false)
         val healthConnectFirstBootHandled = prefBoolean("health_connect_first_boot_handled", false)
         val permissionPromptShown = prefBoolean("permission_prompt_shown", false)
+        val batteryPromptDeclined = prefBoolean("battery_prompt_declined", false)
         val userName = prefString("user_name", "")
         val primarySport = prefString("primary_sport", "RUNNING")
         val stepGoal = prefInt("daily_step_goal", 8000)
@@ -285,6 +293,7 @@ class MilesPreferences(context: Context) {
             hasCompletedSetup = hasSetup,
             healthConnectFirstBootHandled = healthConnectFirstBootHandled,
             permissionPromptShown = permissionPromptShown,
+            batteryPromptDeclined = batteryPromptDeclined,
             userName = userName,
             primarySport = primarySport,
             dailyStepGoal = stepGoal,
@@ -460,6 +469,11 @@ class MilesPreferences(context: Context) {
     fun markPermissionPromptShown() {
         prefs.edit().putBoolean("permission_prompt_shown", true).apply()
         _userPreferences.value = _userPreferences.value.copy(permissionPromptShown = true)
+    }
+
+    fun markBatteryPromptDeclined() {
+        prefs.edit().putBoolean("battery_prompt_declined", true).apply()
+        _userPreferences.value = _userPreferences.value.copy(batteryPromptDeclined = true)
     }
 
     fun setTheme(theme: BaseThemeOption) {

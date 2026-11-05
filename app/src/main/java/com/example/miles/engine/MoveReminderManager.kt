@@ -21,7 +21,7 @@ class MoveReminderManager(
         const val CHANNEL_ID = "miles_move_reminders"
         const val NOTIFICATION_ID = 2048
         const val REQUEST_CODE = 2048
-        const val ACTION_MOVE_REMINDER = "com.aistudio.miles.track.action.MOVE_REMINDER"
+        const val ACTION_MOVE_REMINDER = "com.anshlabs.miles.action.MOVE_REMINDER"
     }
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager

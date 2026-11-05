@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.miles.data.local.DistanceUnit
+import com.example.miles.data.local.fromMeters
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
@@ -66,6 +68,7 @@ enum class SmartCollectionFilter(val label: String) {
 @Composable
 fun HistoryScreen(
     activities: List<ActivityEntity>,
+    unit: DistanceUnit = DistanceUnit.METRIC,
     onSelectActivity: (ActivityEntity) -> Unit,
     onToggleFavorite: ((ActivityEntity) -> Unit)? = null
 ) {
@@ -203,6 +206,7 @@ fun HistoryScreen(
             items(filteredActivities) { act ->
                 HistoryActivityItem(
                     activity = act,
+                    unit = unit,
                     onClick = { onSelectActivity(act) },
                     onToggleFavorite = { onToggleFavorite?.invoke(act) }
                 )
@@ -218,6 +222,7 @@ fun HistoryScreen(
 @Composable
 fun HistoryActivityItem(
     activity: ActivityEntity,
+    unit: DistanceUnit = DistanceUnit.METRIC,
     onClick: () -> Unit,
     onToggleFavorite: (() -> Unit)? = null
 ) {
@@ -290,7 +295,7 @@ fun HistoryActivityItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                StatColumn(label = "DISTANCE", value = "${(activity.distanceMeters / 1000.0).format(2)} km")
+                StatColumn(label = "DISTANCE", value = "${unit.fromMeters(activity.distanceMeters).format(2)} ${unit.symbol}")
                 StatColumn(label = "TIME", value = "${activity.durationSeconds / 60}m ${activity.durationSeconds % 60}s")
                 StatColumn(label = "AVG PACE", value = "${formatPaceSecPerKm(activity.avgPaceSecPerKm)}/km")
                 StatColumn(label = "ELEVATION", value = "+${activity.elevationGainM.toInt()} m")

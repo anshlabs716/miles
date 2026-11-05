@@ -1,7 +1,10 @@
 package com.example.miles.ui.dashboard
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.BatteryManager
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -41,6 +44,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Map
@@ -332,12 +336,27 @@ fun DashboardScreen(
                         tint = if (batteryPct > 20) Color(0xFF4CAF50) else Color(0xFFFF5252)
                     )
                 }
-                // GPS Status Chip
+                // GPS Status Chip — reflects the real permission state instead of always
+                // claiming readiness when location has been denied.
                 item {
+                    val locationGranted = remember {
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED ||
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED
+                    }
                     StatusChip(
-                        icon = Icons.Default.GpsFixed,
-                        label = if (liveStats.state != TrackingState.IDLE) "GPS Active" else "GPS Ready",
-                        tint = MaterialTheme.colorScheme.primary,
+                        icon = if (locationGranted) Icons.Default.GpsFixed else Icons.Default.GpsOff,
+                        label = when {
+                            !locationGranted -> "Location denied"
+                            liveStats.state != TrackingState.IDLE -> "GPS Active"
+                            else -> "GPS Ready"
+                        },
+                        tint = if (locationGranted) MaterialTheme.colorScheme.primary else Color(0xFFFF9800),
                         onClick = onOpenTools
                     )
                 }

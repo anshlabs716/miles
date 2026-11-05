@@ -261,6 +261,11 @@ class SmartTrackingEngine(
             state = TrackingState.RECORDING,
             isAutoPaused = false
         )
+        // A recovered workout is restored without any running jobs, so resuming has to bring the
+        // clock and the recovery saves back up. Otherwise elapsed time stays frozen while distance
+        // keeps growing, which produced impossible average speeds (and lost data on a second kill).
+        startTimer()
+        startTelemetryLoop()
         _events.tryEmit(TrackingEvent.AutoPauseTriggered(false))
         saveRecoveryState()
     }
@@ -906,6 +911,9 @@ class SmartTrackingEngine(
             tickIntervalMs = counterIntervalMs,
             telemetryIntervalMs = telemetryIntervalMs
         )
+        // The workout comes back paused, so the time spent dead/foregrounded must be booked as
+        // paused time. Without this the next resume jumps the clock forward over the downtime.
+        pauseStartTimestamp = System.currentTimeMillis()
     }
 
     private fun clearRecoveryState() {

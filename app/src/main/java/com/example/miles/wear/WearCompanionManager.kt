@@ -3,7 +3,10 @@ package com.example.miles.wear
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.BatteryManager
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import android.provider.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -141,6 +144,13 @@ class WearCompanionManager(private val context: Context) {
     }
 
     private fun startLan() {
+        // Android 17 blocks local-network access unless ACCESS_LOCAL_NETWORK was granted.
+        // Skip silently (UDP broadcast would fail with EPERM) instead of spinning on errors.
+        if (Build.VERSION.SDK_INT >= 37) {
+            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!granted) return
+        }
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
         val appVersion = runCatching {
             @Suppress("DEPRECATION")

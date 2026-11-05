@@ -52,9 +52,21 @@ class TrackingForegroundService : Service() {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
 
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * FOREGROUND_SERVICE_TYPE_LOCATION is only requested when location is actually granted.
+     * Always asking for it threw SecurityException ("Starting FGS with type location ...
+     * requires ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION") whenever location was denied
+     * but activity recognition was allowed, which made the app unopenable after setup.
+     */
     private fun foregroundType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH or
+        val location = if (hasLocationPermission()) {
             android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        } else 0
+        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH or location
     } else 0
 
     private fun createChannel() {

@@ -11,11 +11,11 @@ android {
   // F-Droid only need the standard Android 17 SDK installed.
   compileSdk = 37
   defaultConfig {
-    applicationId = "com.aistudio.miles.track"
+    applicationId = "com.anshlabs.miles"
     minSdk = 26
     targetSdk = 37
-    versionCode = 10
-    versionName = "1.1.3"
+    versionCode = 11
+    versionName = "1.1.4"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
   // Release signing is optional: distro builders (F-Droid) and fresh clones have

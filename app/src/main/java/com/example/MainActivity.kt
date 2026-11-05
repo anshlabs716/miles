@@ -129,7 +129,15 @@ class MainActivity : ComponentActivity() {
             val activities by repository.activities.collectAsState(initial = emptyList())
             val liveStats by smartEngine.liveStats.collectAsState()
             val powerManager = remember { getSystemService(Context.POWER_SERVICE) as? PowerManager }
-            var showBatteryOptDialog by remember { mutableStateOf(powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) }
+            // Shown once unless the user hasn't granted the exemption yet; "Not Now" is persisted
+            // so the dialog doesn't come back on every cold start and rotation.
+            var showBatteryOptDialog by remember {
+                mutableStateOf(
+                    powerManager != null &&
+                        !powerManager.isIgnoringBatteryOptimizations(packageName) &&
+                        !userPrefs.batteryPromptDeclined
+                )
+            }
 
             var healthConnectState by remember { mutableStateOf(HealthConnectConnectionState.UNAVAILABLE) }
             var requestHealthConnectAfterSystem by remember { mutableStateOf(false) }
@@ -199,6 +207,10 @@ class MainActivity : ComponentActivity() {
                     // Android 16 wants the granular health permission instead of BODY_SENSORS.
                     if (deviceHeartRate.hasHardware()) add(heartRatePermission())
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT) }
+                    // Android 17 (target SDK 37) blocks local-network access by default, so the
+                    // opt-in Wear OS LAN pairing needs ACCESS_LOCAL_NETWORK requested at runtime.
+                    // Same NEARBY_DEVICES group as the Bluetooth prompts above.
+                    if (android.os.Build.VERSION.SDK_INT >= 37) add(Manifest.permission.ACCESS_LOCAL_NETWORK)
                 }.toTypedArray()
             }
             // Real permission flow: fires the actual Android system permission dialog, and the
@@ -297,7 +309,7 @@ class MainActivity : ComponentActivity() {
                         title = { Text("Unrestricted Background Battery", style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) },
                         text = { Text("MILES uses background tracking for real steps and active GPS routes. Android may stop tracking if battery restrictions remain enabled.", style = MaterialTheme.typography.bodyMedium) },
                         confirmButton = { Button(onClick = { showBatteryOptDialog = false; runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply { data = Uri.parse("package:$packageName") }) }.onFailure { runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } } }) { Text("Allow Exemption") } },
-                        dismissButton = { TextButton(onClick = { showBatteryOptDialog = false }) { Text("Not Now") } }
+                        dismissButton = { TextButton(onClick = { showBatteryOptDialog = false; preferences.markBatteryPromptDeclined() }) { Text("Not Now") } }
                     )
                 }
 
@@ -337,7 +349,7 @@ class MainActivity : ComponentActivity() {
                             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                                 when (subScreen) {
                                     MilesSubScreen.WORKOUT_HUD -> WorkoutHudScreen(smartEngine = smartEngine, onFinishWorkout = { saved -> selectedActivity = saved; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onDiscardWorkout = { subScreen = MilesSubScreen.NONE }, onBack = { subScreen = MilesSubScreen.NONE })
-                                    MilesSubScreen.ACTIVITY_DETAIL -> selectedActivity?.let { act -> ActivityDetailScreen(activity = act, repository = repository, onBack = { subScreen = MilesSubScreen.NONE }, onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) }, onDeleted = { subScreen = MilesSubScreen.NONE }) } ?: run { subScreen = MilesSubScreen.NONE }
+                                    MilesSubScreen.ACTIVITY_DETAIL -> selectedActivity?.let { act -> ActivityDetailScreen(activity = act, repository = repository, unit = userPrefs.unit, onBack = { subScreen = MilesSubScreen.NONE }, onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) }, onDeleted = { subScreen = MilesSubScreen.NONE }) } ?: run { subScreen = MilesSubScreen.NONE }
                                     MilesSubScreen.DEVICES -> DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion, preferences = preferences, moveReminderManager = moveReminderManager)
                                     MilesSubScreen.STUDIO -> MilesStudioScreen(repository = repository, smartEngine = smartEngine, wearCompanion = wearCompanion, preferences = preferences, onBack = { subScreen = MilesSubScreen.NONE }, onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR })
                                     MilesSubScreen.DISTANCE_CALCULATOR -> DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
@@ -374,6 +386,7 @@ class MainActivity : ComponentActivity() {
                                             activities = activities,
                                             repository = repository,
                                             preferences = preferences,
+                                            unit = userPrefs.unit,
                                             onSelectActivity = { act -> selectedActivity = act; subScreen = MilesSubScreen.ACTIVITY_DETAIL },
                                             onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } }
                                         )

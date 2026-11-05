@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.miles.data.local.DistanceUnit
 import com.example.miles.data.local.MilesPreferences
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.repository.MilesRepository
@@ -47,6 +48,7 @@ fun JournalScreen(
     activities: List<ActivityEntity>,
     repository: MilesRepository? = null,
     preferences: MilesPreferences? = null,
+    unit: DistanceUnit = DistanceUnit.METRIC,
     onSelectActivity: (ActivityEntity) -> Unit,
     onToggleFavorite: ((ActivityEntity) -> Unit)? = null
 ) {
@@ -117,9 +119,10 @@ fun JournalScreen(
         Spacer(Modifier.height(4.dp))
         Box(Modifier.weight(1f)) {
             when (selectedTab) {
-                0 -> HistoryScreen(activities = activities, onSelectActivity = onSelectActivity, onToggleFavorite = onToggleFavorite)
+                0 -> HistoryScreen(activities = activities, unit = unit, onSelectActivity = onSelectActivity, onToggleFavorite = onToggleFavorite)
                 1 -> StatisticsScreen(
                     activities = activities,
+                    unit = unit,
                     stepGoal = preferences?.userPreferences?.value?.dailyStepGoal ?: 8000
                 )
             }

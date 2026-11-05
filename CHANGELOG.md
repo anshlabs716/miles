@@ -4,6 +4,34 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.4]
+
+### Fixed
+- A crash that made MILES unopenable once setup finished when location was denied but
+  physical activity was allowed. `TrackingForegroundService` always requested the
+  `location` foreground type, so Android threw
+  `SecurityException: Starting FGS with type location ... requires ACCESS_COARSE_LOCATION,
+  ACCESS_FINE_LOCATION`. The type is now built from the permissions actually granted.
+- A recovered workout's clock after Resume. `restoreTrackingStateIfAvailable()` brought the
+  run back paused without starting the timer or telemetry loop, so elapsed time stayed
+  frozen while distance grew (reported: 1.22 km in 1m 41s, 43.5 km/h). `resumeTracking()`
+  now restarts both loops, and the downtime is booked as paused time so the clock no longer
+  jumps. A second force-stop also no longer loses everything recorded after the Resume.
+- The route builder's Navigate buttons never called `onStartNavigation`, so
+  `setNavigationRoute()` never received the route and the banner stayed hard-coded. Both
+  the builder and the library now hand the route to the tracking engine.
+- The dashboard GPS chip claimed "GPS Ready" even with location denied; it now reports
+  "Location denied".
+- The distance unit setting only reached the dashboard. Journal, Trends and activity
+  details now honour it as well.
+- "Not Now" on the battery-optimisation dialog is persisted instead of being recomputed on
+  every cold start and rotation.
+
+### Added
+- `ACCESS_LOCAL_NETWORK` in the manifest. Android 17 blocks local-network access by default
+  for apps targeting SDK 37, which would have broken the opt-in Wear OS LAN pairing
+  (`wear/LanTransport.kt`, UDP 47821).
+
 ## [1.1.3]
 
 ### Changed

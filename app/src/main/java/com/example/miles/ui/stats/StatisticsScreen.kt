@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.miles.data.local.DistanceUnit
+import com.example.miles.data.local.fromMeters
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
 import com.example.miles.data.repository.format
@@ -93,6 +95,7 @@ data class FitnessBadge(
 @Composable
 fun StatisticsScreen(
     activities: List<ActivityEntity>,
+    unit: DistanceUnit = DistanceUnit.METRIC,
     stepGoal: Int = 8000
 ) {
     var selectedTimeFrame by remember { mutableStateOf(StatsTimeFrame.WEEK) }
@@ -108,6 +111,7 @@ fun StatisticsScreen(
 
     // Current period aggregations
     val periodDistanceKm = currentPeriodActivities.sumOf { it.distanceMeters } / 1000.0
+    val periodDistanceDisplay = unit.fromMeters(currentPeriodActivities.sumOf { it.distanceMeters })
     val prevPeriodDistanceKm = previousPeriodActivities.sumOf { it.distanceMeters } / 1000.0
     val distanceDeltaPct = if (prevPeriodDistanceKm > 0) ((periodDistanceKm - prevPeriodDistanceKm) / prevPeriodDistanceKm) * 100 else 0.0
 
@@ -316,7 +320,7 @@ fun StatisticsScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "${periodDistanceKm.format(2)} km",
+                                text = "${periodDistanceDisplay.format(2)} ${unit.symbol}",
                                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black)
                             )
                         }
@@ -618,7 +622,7 @@ fun StatisticsScreen(
                 longestActivity?.let { act ->
                     RecordItem(
                         title = "Longest Distance",
-                        value = "${(act.distanceMeters / 1000.0).format(2)} km",
+                        value = "${unit.fromMeters(act.distanceMeters).format(2)} ${unit.symbol}",
                         subtitle = act.title,
                         icon = Icons.Default.EmojiEvents,
                         color = Color(0xFFFFB300)

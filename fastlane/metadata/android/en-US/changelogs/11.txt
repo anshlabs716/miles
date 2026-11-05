@@ -1,0 +1,8 @@
+- Fixed the crash that made MILES unopenable when location is denied but activity recognition is allowed: the foreground service now only asks for the location type when location is actually granted
+- Added ACCESS_LOCAL_NETWORK so the opt-in Wear OS pairing still works on Android 17, which blocks local network access by default for apps targeting SDK 37
+- Fixed a recovered workout's clock after Resume: the timer and recovery saves restart, and the time spent in the background is counted as paused instead of freezing the clock while distance kept growing
+- The route builder's Navigate button now actually hands the route to the tracking engine instead of only showing the banner
+- The dashboard GPS chip now says "Location denied" instead of always claiming "GPS Ready"
+- The distance unit setting now applies to the Journal, Trends and activity details, not just the dashboard
+- "Not Now" on the battery optimisation dialog is remembered, so it no longer reappears on every launch or rotation
+- Bumped to versionCode 11

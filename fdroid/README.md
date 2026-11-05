@@ -13,8 +13,8 @@ Everything in this folder is already validated. This is the order to use it.
 | Proprietary dependencies | ✅ none — no Play Services, Firebase, or proprietary map SDK |
 | Licence | ✅ GPLv3 |
 | Screenshots | ✅ 6 reviewed images in `fastlane/metadata/android/en-US/images/phoneScreenshots/` |
-| Build recipe | ✅ `build/com.aistudio.miles.track.gradle` in this folder |
-| App metadata | ✅ `metadata/com.aistudio.miles.track.yml` in this folder |
+| Build recipe | ✅ `build/com.anshlabs.miles.gradle` in this folder |
+| App metadata | ✅ `metadata/com.anshlabs.miles.yml` in this folder |
 
 ## Steps
 
@@ -31,12 +31,12 @@ Everything in this folder is already validated. This is the order to use it.
    - Source repo: `https://github.com/anshlabs716/miles`
    - Licence: `GPL-3.0-only`
    - Build: F-Droid will propose `./gradlew assembleRelease`; paste
-     `fdroid/build/com.aistudio.miles.track.gradle` if it asks for a recipe.
+     `fdroid/build/com.anshlabs.miles.gradle` if it asks for a recipe.
    - Request **inclusion in F-Droid's official repository**.
 
 4. **If the build fails** on `com.android.application version 9.1.1`, F-Droid's
    builder doesn't have that AGP yet. Lower `agpVersion` in
-   `fdroid/build/com.aistudio.miles.track.gradle` **and** `agp` in
+   `fdroid/build/com.anshlabs.miles.gradle` **and** `agp` in
    `gradle/libs.versions.toml` together, re-tag, and resubmit.
 
 ## What is deliberately not here
