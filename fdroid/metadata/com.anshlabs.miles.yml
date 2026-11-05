@@ -20,4 +20,15 @@ AutoName: MILES
 RepoType: git
 Repo: https://github.com/anshlabs716/miles
 
-PLACEHOLDER_BUILDS
+Builds:
+  - versionName: 1.1.4
+    versionCode: 11
+    commit: 668f09d7aaca09e82eac7ef25b7e1a509231d9e1
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.1.4
+CurrentVersionCode: 11
