@@ -6,3 +6,4 @@
 - The distance unit setting now applies to the Journal, Trends and activity details, not just the dashboard
 - "Not Now" on the battery optimisation dialog is remembered, so it no longer reappears on every launch or rotation
 - Bumped to versionCode 11
+- Application id is now com.anshlabs.miles (was com.aistudio.miles.track) - installs fresh, not as an upgrade
