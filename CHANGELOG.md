@@ -6,6 +6,10 @@ All notable changes to MILES are recorded here.
 
 ## [1.1.4]
 
+### Changed
+- **Application id is now `com.anshlabs.miles`** (was `com.aistudio.miles.track`), so this
+  installs as a fresh app rather than upgrading in place.
+
 ### Fixed
 - A crash that made MILES unopenable once setup finished when location was denied but
   physical activity was allowed. `TrackingForegroundService` always requested the
