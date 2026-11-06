@@ -4,6 +4,34 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.6]
+
+### Fixed
+- The workout HUD's map layer button (Street → Satellite → Terrain → Dark) now
+  actually changes the map. `RealOsmMapView` only read `initialTileSource` on its
+  first composition, so the button updated state the map never saw; it now drives
+  a controlled tile source, and the in-map layer button keeps that state in sync.
+- "Course Heading Up" panning no longer uses a stale compass course. The gesture
+  handler launches once and captured the heading from first composition, so after
+  turning a corner drags went in the wrong direction; it now reads the heading
+  through `rememberUpdatedState`.
+- "Course Heading Up" no longer leaves blank corners. The rotated map content is
+  now oversized by 1.5x while rotated (a square rotated by θ needs
+  |cosθ|+|sinθ| ≤ √2 extra side to still cover the viewport); north-up keeps the
+  exact previous layout.
+- The speed heatmap works on devices that never populate `Location.speed`: the
+  engine now backfills the derived per-leg speed onto stored GPS points, matching
+  what it already did for the stats.
+- The breadcrumb colour preference and the heading rotation preference are now
+  honoured on the route planner screen too, not just the HUD and activity detail.
+- Removed the "HR Zones" breadcrumb option from Settings: GPS points carry no
+  heart rate, so it could never render zones and silently fell back to cyan
+  (the release notes already stated it was not offered).
+
+### Changed
+- Bumped to versionCode 13.
+
+
 ## [1.1.5]
 
 ### Fixed

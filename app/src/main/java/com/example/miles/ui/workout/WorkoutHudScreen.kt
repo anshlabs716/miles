@@ -85,6 +85,15 @@ import com.example.miles.ui.theme.LiquidGlassCard
 import com.example.miles.ui.theme.LiquidGlassPanel
 import kotlinx.coroutines.launch
 
+/** Tile source picked on the HUD -> the MapStyleMode the layer button cycles through. */
+private fun mapStyleForTile(ts: com.example.miles.ui.map.RealOsmTileSource): MapStyleMode =
+    when (ts) {
+        com.example.miles.ui.map.RealOsmTileSource.SATELLITE -> MapStyleMode.SATELLITE
+        com.example.miles.ui.map.RealOsmTileSource.OPEN_TOPO -> MapStyleMode.TERRAIN
+        com.example.miles.ui.map.RealOsmTileSource.CARTO_DARK -> MapStyleMode.AMOLED_DARK
+        else -> MapStyleMode.STANDARD
+    }
+
 @Composable
 fun WorkoutHudScreen(
     smartEngine: SmartTrackingEngine,
@@ -468,6 +477,7 @@ fun WorkoutHudScreen(
                         formatElapsedTime = { smartEngine.formatElapsedTime(it) },
                         formatPace = { smartEngine.formatPace(it) },
                         mapStyle = mapStyle,
+                        onMapStyleChange = { mapStyle = it },
                         initialTileSource = initialTileSource,
                         mapAutoFollow = mapAutoFollow,
                         polylineColorMode = polylineColorMode,
@@ -690,6 +700,7 @@ fun PrimaryHudPage(
     formatElapsedTime: (Long) -> String,
     formatPace: (Double) -> String,
     mapStyle: MapStyleMode,
+    onMapStyleChange: (MapStyleMode) -> Unit = {},
     initialTileSource: com.example.miles.ui.map.RealOsmTileSource = com.example.miles.ui.map.RealOsmTileSource.STANDARD,
     mapAutoFollow: Boolean = true,
     polylineColorMode: String = "SPEED_GRADIENT",
@@ -876,12 +887,15 @@ fun PrimaryHudPage(
                 autoCenter = mapAutoFollow,
                 polylineColorMode = polylineColorMode,
                 headingRotationMode = headingRotationMode,
-                initialTileSource = when (mapStyle) {
+                // Controlled tile source: remember{initialTileSource} only reads the
+                // value once, so the layer button must drive currentTileSource (B1).
+                currentTileSource = when (mapStyle) {
                     MapStyleMode.SATELLITE -> com.example.miles.ui.map.RealOsmTileSource.SATELLITE
                     MapStyleMode.TERRAIN -> com.example.miles.ui.map.RealOsmTileSource.OPEN_TOPO
                     MapStyleMode.AMOLED_DARK -> com.example.miles.ui.map.RealOsmTileSource.CARTO_DARK
                     else -> initialTileSource
                 },
+                onTileSourceChanged = { ts -> onMapStyleChange(mapStyleForTile(ts)) },
                 showControls = true
             )
         }

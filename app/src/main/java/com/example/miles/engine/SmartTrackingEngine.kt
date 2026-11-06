@@ -492,7 +492,8 @@ class SmartTrackingEngine(
 
     private fun appendValidatedPoint(point: GpsPoint) {
         val current = _liveStats.value
-        val newPoints = current.points + point
+        // Backfilled below when a device never populates Location.speed (B4).
+        var storedPoint = point
 
         var totalDist = current.distanceMeters
         var addedElevGain = 0.0
@@ -531,6 +532,11 @@ class SmartTrackingEngine(
             val timeDeltaSec = ((point.timestamp - last.timestamp) / 1000.0).coerceIn(0.1, 15.0)
             val derivedSpeedMps = if (timeDeltaSec > 0.1) legDist / timeDeltaSec else 0.0
             val effectiveSpeedMps = if (point.speed > 0.2f) point.speed.toDouble() else derivedSpeedMps
+            // Stats derive speed per leg, but the map's speed heatmap reads
+            // GpsPoint.speed directly — without the backfill it stays flat cyan.
+            if (point.speed <= 0.2f && derivedSpeedMps > 0.25) {
+                storedPoint = point.copy(speed = derivedSpeedMps.toFloat())
+            }
             effectiveCurrentSpeedKmh = effectiveSpeedMps * 3.6
             effectiveCurrentPaceSec = if (effectiveSpeedMps > 0.25) (1000.0 / effectiveSpeedMps) else 0.0
 
@@ -643,6 +649,8 @@ class SmartTrackingEngine(
             }
             if (nextWp != null) navNextWpName = nextWp.name
         }
+
+        val newPoints = current.points + storedPoint
 
         _liveStats.value = current.copy(
             distanceMeters = totalDist,

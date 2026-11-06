@@ -14,8 +14,8 @@ android {
     applicationId = "com.anshlabs.miles"
     minSdk = 26
     targetSdk = 37
-    versionCode = 12
-    versionName = "1.1.5"
+    versionCode = 13
+    versionName = "1.1.6"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
   // Release signing is optional: distro builders (F-Droid) and fresh clones have

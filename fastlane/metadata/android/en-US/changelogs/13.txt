@@ -1,0 +1,7 @@
+- The workout HUD's map layer button now really switches the map between Street, Satellite, Terrain and Dark
+- "Course Heading Up" panning follows your finger correctly after you turn, instead of dragging in the wrong direction
+- "Course Heading Up" no longer leaves blank corners on the map
+- The speed heatmap now colours correctly on phones that do not report speed
+- Breadcrumb colour and heading rotation settings now also apply to the route planner screen
+- Removed the non-functional "HR Zones" breadcrumb colour option from Settings
+- Bumped to versionCode 13

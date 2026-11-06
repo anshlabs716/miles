@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -159,6 +160,13 @@ fun RealOsmMapView(
     LaunchedEffect(currentTileSource) {
         if (currentTileSource != null) {
             internalTileSource = currentTileSource
+        }
+    }
+    // The default layer from Settings can change while the map stays composed;
+    // remember{} above would keep the first value forever (B1).
+    LaunchedEffect(initialTileSource) {
+        if (currentTileSource == null) {
+            internalTileSource = initialTileSource
         }
     }
     val effectiveTileSource = currentTileSource ?: internalTileSource
@@ -286,9 +294,20 @@ fun RealOsmMapView(
         // Heading-up mode rotates the map content; pan deltas must be un-rotated so the
         // map still tracks the finger.
         val headingDeg = if (headingRotationMode == "HEADING_UP") {
-            (effectiveUserLocation?.bearing ?: 0f).let { if (it == 0f) 0f else it }
+            (effectiveUserLocation?.bearing ?: 0f)
         } else 0f
-        val headingRad = Math.toRadians(headingDeg.toDouble())
+        // pointerInput(Unit) launches once: the gesture lambda must read the heading
+        // through this State so it never pans with a stale course (B2).
+        val headingState = rememberUpdatedState(headingDeg)
+
+        // Rotating a viewport-sized square leaves blank wedges in the corners.
+        // A square rotated by θ covers the original only when its side is grown by
+        // |cosθ|+|sinθ| (≤ √2 at 45°), so 1.5× is enough for every angle (B3).
+        // North-up keeps 1.5 -> 1.0, i.e. exactly the old layout.
+        val contentScale = if (headingDeg != 0f) 1.5f else 1f
+        val contentW = widthPx * contentScale
+        val contentH = heightPx * contentScale
+
         val gestureModifier = if (isInteractive) {
             Modifier.pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
@@ -298,8 +317,9 @@ fun RealOsmMapView(
                     zoomLevel = newZoom
 
                     // Screen delta -> map-content delta (undo the heading rotation)
-                    val panX = pan.x * cos(headingRad).toFloat() - pan.y * sin(headingRad).toFloat()
-                    val panY = pan.x * sin(headingRad).toFloat() + pan.y * cos(headingRad).toFloat()
+                    val headingRadNow = Math.toRadians(headingState.value.toDouble())
+                    val panX = pan.x * cos(headingRadNow).toFloat() - pan.y * sin(headingRadNow).toFloat()
+                    val panY = pan.x * sin(headingRadNow).toFloat() + pan.y * cos(headingRadNow).toFloat()
 
                     val tileSize = 256.0 * 2.0.pow(newZoom.toDouble())
                     val lonDelta = -(panX / tileSize) * 360.0
@@ -324,7 +344,13 @@ fun RealOsmMapView(
             // "Course Heading Up" mode; the floating controls below stay screen-aligned.
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .offset {
+                        IntOffset(
+                            ((widthPx - contentW) / 2f).roundToInt(),
+                            ((heightPx - contentH) / 2f).roundToInt()
+                        )
+                    }
+                    .size(with(density) { contentW.toDp() }, with(density) { contentH.toDp() })
                     .graphicsLayer {
                         rotationZ = -headingDeg
                         transformOrigin = TransformOrigin.Center
@@ -340,8 +366,8 @@ fun RealOsmMapView(
 
             val tileSizePx = 256f * (2.0.pow((zoomLevel - zoomInt).toDouble())).toFloat()
 
-            val tilesXNeeded = (widthPx / tileSizePx).toInt() + 3
-            val tilesYNeeded = (heightPx / tileSizePx).toInt() + 3
+            val tilesXNeeded = (contentW / tileSizePx).toInt() + 3
+            val tilesYNeeded = (contentH / tileSizePx).toInt() + 3
 
             val startTileX = (floor(centerTileX) - tilesXNeeded / 2).toInt()
             val endTileX = (floor(centerTileX) + tilesXNeeded / 2).toInt()
@@ -353,8 +379,8 @@ fun RealOsmMapView(
                     val clampedTileX = ((tileX % numTiles.toInt()) + numTiles.toInt()) % numTiles.toInt()
                     if (tileY < 0 || tileY >= numTiles.toInt()) continue
 
-                    val offsetX = ((tileX - centerTileX) * tileSizePx + (widthPx / 2f)).roundToInt()
-                    val offsetY = ((tileY - centerTileY) * tileSizePx + (heightPx / 2f)).roundToInt()
+                    val offsetX = ((tileX - centerTileX) * tileSizePx + (contentW / 2f)).roundToInt()
+                    val offsetY = ((tileY - centerTileY) * tileSizePx + (contentH / 2f)).roundToInt()
 
                     val tileUrl = when (effectiveTileSource) {
                         RealOsmTileSource.STANDARD ->
@@ -416,8 +442,8 @@ fun RealOsmMapView(
                     val latR = Math.toRadians(lat.coerceIn(-85.0, 85.0))
                     val yTile = ((1.0 - ln(tan(latR) + 1.0 / cos(latR)) / PI) / 2.0 * numTiles)
 
-                    val px = ((xTile - centerTileX) * tileSizePx + (widthPx / 2f)).toFloat()
-                    val py = ((yTile - centerTileY) * tileSizePx + (heightPx / 2f)).toFloat()
+                    val px = ((xTile - centerTileX) * tileSizePx + (contentW / 2f)).toFloat()
+                    val py = ((yTile - centerTileY) * tileSizePx + (contentH / 2f)).toFloat()
                     return Offset(px, py)
                 }
 
@@ -521,8 +547,8 @@ fun RealOsmMapView(
 
                 // Center Reticle / Crosshair (for Route Builder)
                 if (showCenterCrosshair) {
-                    val centerX = widthPx / 2f
-                    val centerY = heightPx / 2f
+                    val centerX = contentW / 2f
+                    val centerY = contentH / 2f
 
                     // Shadow cross
                     drawLine(

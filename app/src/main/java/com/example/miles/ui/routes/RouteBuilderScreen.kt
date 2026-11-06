@@ -131,6 +131,8 @@ fun RouteBuilderScreen(
     repository: MilesRepository,
     liveStats: com.example.miles.engine.LiveWorkoutStats = com.example.miles.engine.LiveWorkoutStats(),
     defaultTileSource: RealOsmTileSource = RealOsmTileSource.STANDARD,
+    polylineColorMode: String = "SPEED_GRADIENT",
+    headingRotationMode: String = "NORTH_UP",
     onStartNavigation: ((SavedRouteEntity) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -258,6 +260,8 @@ fun RouteBuilderScreen(
                     showCenterCrosshair = !isNavigatingLive,
                     showControls = false, // Clean layout: unified with RouteBuilder toolbar to prevent overlapping
                     initialTileSource = selectedTileSource,
+                    polylineColorMode = polylineColorMode,
+                    headingRotationMode = headingRotationMode,
                     currentTileSource = selectedTileSource,
                     onTileSourceChanged = { selectedTileSource = it },
                     recenterRequest = recenterRequest,

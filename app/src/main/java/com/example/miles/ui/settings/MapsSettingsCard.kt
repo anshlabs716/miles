@@ -96,7 +96,9 @@ fun MapsSettingsCard(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("SPEED_GRADIENT" to "Speed Heatmap", "HR_GRADIENT" to "HR Zones", "SOLID_CYAN" to "Cyan Glow").forEach { (mode, label) ->
+                // "HR Zones" removed: GPS points carry no heart rate, so it could
+                // never render zones (B5).
+                listOf("SPEED_GRADIENT" to "Speed Heatmap", "SOLID_CYAN" to "Cyan Glow").forEach { (mode, label) ->
                     FilterChip(
                         selected = userPrefs.mapPolylineColorMode == mode,
                         onClick = { preferences.updatePreferences { it.copy(mapPolylineColorMode = mode) } },
