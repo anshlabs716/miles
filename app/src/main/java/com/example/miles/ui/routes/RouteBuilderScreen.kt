@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
@@ -128,6 +129,8 @@ data class SavedPlaceItem(
 @Composable
 fun RouteBuilderScreen(
     repository: MilesRepository,
+    liveStats: com.example.miles.engine.LiveWorkoutStats = com.example.miles.engine.LiveWorkoutStats(),
+    defaultTileSource: RealOsmTileSource = RealOsmTileSource.STANDARD,
     onStartNavigation: ((SavedRouteEntity) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -138,7 +141,7 @@ fun RouteBuilderScreen(
     var libraryFavoritesOnly by remember { mutableStateOf(false) }
 
     // Map & Layer State (Auto-switches directly without menu)
-    var selectedTileSource by remember { mutableStateOf(RealOsmTileSource.STANDARD) }
+    var selectedTileSource by remember { mutableStateOf(defaultTileSource) }
     var showPlacesDialog by remember { mutableStateOf(false) }
     var is3dMode by remember { mutableStateOf(false) }
     var recenterRequest by remember { mutableIntStateOf(0) }
@@ -158,7 +161,6 @@ fun RouteBuilderScreen(
     // Live Turn-by-Turn Navigation State
     var isNavigatingLive by remember { mutableStateOf(false) }
     var activeNavRouteName by remember { mutableStateOf("Custom Planned Route") }
-    var navStepIndex by remember { mutableIntStateOf(0) }
     var voiceMuted by remember { mutableStateOf(false) }
 
     // Saved Places list — starts EMPTY and only contains places the user
@@ -367,8 +369,19 @@ fun RouteBuilderScreen(
                                             .background(MaterialTheme.colorScheme.primary),
                                         contentAlignment = Alignment.Center
                                     ) {
+                                        // Turn direction from real bearing: heading to the next
+                                        // route point vs. the device's current course.
+                                        val navHeading = liveStats.points.lastOrNull()?.bearing ?: 0f
+                                        val navDelta = ((liveStats.navBearingDeg - navHeading + 540f) % 360f) - 180f
+                                        val navIcon = when {
+                                            liveStats.navIsOffRoute -> Icons.Default.Warning
+                                            liveStats.points.isEmpty() || navHeading == 0f -> Icons.Default.Navigation
+                                            navDelta > 30f -> Icons.Default.TurnRight
+                                            navDelta < -30f -> Icons.Default.TurnLeft
+                                            else -> Icons.Default.Navigation
+                                        }
                                         Icon(
-                                            if (navStepIndex % 2 == 0) Icons.Default.TurnRight else Icons.Default.TurnLeft,
+                                            navIcon,
                                             contentDescription = null,
                                             tint = Color.White,
                                             modifier = Modifier.size(26.dp)
@@ -377,11 +390,18 @@ fun RouteBuilderScreen(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = if (navStepIndex % 2 == 0) "In 150m, Turn Right" else "In 220m, Turn Left",
+                                            text = when {
+                                                liveStats.navIsOffRoute ->
+                                                    "Off route — ${liveStats.navCrossTrackErrorM.toInt()} m from path"
+                                                liveStats.activeNavRoute == null -> "Follow the highlighted route"
+                                                else -> "In ${liveStats.navDistanceToNextM.toInt()} m: ${liveStats.navNextWaypointName.ifBlank { "next point" }}"
+                                            },
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White)
                                         )
                                         Text(
-                                            text = "Onto Pine Ridge Trail • Follow Route",
+                                            text = if (liveStats.navRemainingDistanceM > 0.0)
+                                                "$activeNavRouteName • ${liveStats.navRemainingDistanceM.toInt()} m remaining"
+                                            else activeNavRouteName,
                                             style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF94A3B8))
                                         )
                                     }

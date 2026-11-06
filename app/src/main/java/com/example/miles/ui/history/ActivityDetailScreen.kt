@@ -85,6 +85,9 @@ fun ActivityDetailScreen(
     activity: ActivityEntity,
     repository: MilesRepository,
     unit: DistanceUnit = DistanceUnit.METRIC,
+    initialTileSource: com.example.miles.ui.map.RealOsmTileSource = com.example.miles.ui.map.RealOsmTileSource.STANDARD,
+    polylineColorMode: String = "SPEED_GRADIENT",
+    headingRotationMode: String = "NORTH_UP",
     onBack: () -> Unit,
     onSetAsGhostReference: (ActivityEntity) -> Unit,
     onDeleted: () -> Unit
@@ -268,6 +271,9 @@ fun ActivityDetailScreen(
                     points = points,
                     waypoints = waypoints,
                     userLocation = activePoint,
+                    initialTileSource = initialTileSource,
+                    polylineColorMode = polylineColorMode,
+                    headingRotationMode = headingRotationMode,
                     showControls = true
                 )
             }

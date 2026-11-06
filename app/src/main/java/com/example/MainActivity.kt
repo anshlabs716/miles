@@ -46,6 +46,7 @@ import com.example.miles.data.local.MilesDatabase
 import com.example.miles.data.local.MilesPreferences
 import com.example.miles.data.model.ActivityEntity
 import com.example.miles.data.model.ActivityType
+import com.example.miles.ui.map.mapLayerToTileSource
 import com.example.miles.data.repository.MilesRepository
 import android.content.Context
 import android.content.Intent
@@ -348,8 +349,8 @@ class MainActivity : ComponentActivity() {
                             }
                             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                                 when (subScreen) {
-                                    MilesSubScreen.WORKOUT_HUD -> WorkoutHudScreen(smartEngine = smartEngine, onFinishWorkout = { saved -> selectedActivity = saved; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onDiscardWorkout = { subScreen = MilesSubScreen.NONE }, onBack = { subScreen = MilesSubScreen.NONE })
-                                    MilesSubScreen.ACTIVITY_DETAIL -> selectedActivity?.let { act -> ActivityDetailScreen(activity = act, repository = repository, unit = userPrefs.unit, onBack = { subScreen = MilesSubScreen.NONE }, onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) }, onDeleted = { subScreen = MilesSubScreen.NONE }) } ?: run { subScreen = MilesSubScreen.NONE }
+                                    MilesSubScreen.WORKOUT_HUD -> WorkoutHudScreen(smartEngine = smartEngine, onFinishWorkout = { saved -> selectedActivity = saved; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onDiscardWorkout = { subScreen = MilesSubScreen.NONE }, onBack = { subScreen = MilesSubScreen.NONE }, initialTileSource = mapLayerToTileSource(userPrefs.defaultMapLayer), mapAutoFollow = userPrefs.mapAutoFollow, mapKeepScreenOn = userPrefs.mapKeepScreenOn, polylineColorMode = userPrefs.mapPolylineColorMode, headingRotationMode = userPrefs.mapHeadingRotationMode)
+                                    MilesSubScreen.ACTIVITY_DETAIL -> selectedActivity?.let { act -> ActivityDetailScreen(activity = act, repository = repository, unit = userPrefs.unit, initialTileSource = mapLayerToTileSource(userPrefs.defaultMapLayer), polylineColorMode = userPrefs.mapPolylineColorMode, onBack = { subScreen = MilesSubScreen.NONE }, onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) }, onDeleted = { subScreen = MilesSubScreen.NONE }) } ?: run { subScreen = MilesSubScreen.NONE }
                                     MilesSubScreen.DEVICES -> DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion, preferences = preferences, moveReminderManager = moveReminderManager)
                                     MilesSubScreen.STUDIO -> MilesStudioScreen(repository = repository, smartEngine = smartEngine, wearCompanion = wearCompanion, preferences = preferences, onBack = { subScreen = MilesSubScreen.NONE }, onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR })
                                     MilesSubScreen.DISTANCE_CALCULATOR -> DistanceCalculatorScreen(onBack = { subScreen = MilesSubScreen.STUDIO })
@@ -391,7 +392,7 @@ class MainActivity : ComponentActivity() {
                                             onToggleFavorite = { act -> mainScope.launch { repository.toggleActivityFavorite(act.id) } }
                                         )
                                         MilesNavigationTab.TRAINING -> ProgressiveTrainingScreen(preferences = preferences, onStartWorkout = { title, intervals, type -> smartEngine.counterIntervalMs = userPrefs.counterIntervalMs; smartEngine.telemetryIntervalMs = userPrefs.telemetryIntervalMs; smartEngine.startIntervalWorkout(title, intervals, type); subScreen = MilesSubScreen.WORKOUT_HUD })
-                                        MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
+                                        MilesNavigationTab.ROUTES -> RouteBuilderScreen(repository = repository, liveStats = liveStats, defaultTileSource = mapLayerToTileSource(userPrefs.defaultMapLayer), onStartNavigation = { route -> smartEngine.setNavigationRoute(route); if (smartEngine.liveStats.value.state != TrackingState.RECORDING) smartEngine.startTracking(ActivityType.RUNNING); subScreen = MilesSubScreen.WORKOUT_HUD })
                                         MilesNavigationTab.PROFILE -> SettingsScreen(
                                             preferences = preferences,
                                             repository = repository,

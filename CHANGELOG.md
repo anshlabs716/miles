@@ -4,6 +4,35 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+## [1.1.5]
+
+### Fixed
+- The route builder's live navigation banner no longer shows invented text
+  ("In 150m, Turn Right", "Onto Pine Ridge Trail"). It now reads the tracking
+  engine's real navigation state: distance to the next point, the actual
+  waypoint name, remaining distance, and an off-route warning with the real
+  cross-track error. The turn icon comes from the bearing difference between
+  the route and the device's current course, instead of a counter that never
+  changed.
+- The Maps settings are now honoured outside the Settings screen:
+  the default map layer, auto-centering, keep-screen-on during a workout,
+  the breadcrumb colour style, the heading rotation mode and the GPS accuracy
+  filter were previously written but never read by the map or the engine.
+- The AMOLED/Dark map layer setting actually switches tiles: "AMOLED Dark"
+  now loads CARTO's dark tiles instead of silently staying on OpenStreetMap,
+  and the HUD's layer button drives the real tile source too.
+- The "Course Heading Up" map orientation now rotates the map content around
+  the screen centre (pan gestures are un-rotated so the map still tracks the
+  finger); "Fixed North Up" behaves as before.
+- The GPS outlier filter slider now feeds the engine's stationary-noise
+  deadband instead of being ignored (default ±25 m).
+- The Default Map Renderer chips (including "Satellite") scroll horizontally
+  instead of being squeezed off the edge on narrow screens.
+
+### Changed
+- Bumped to versionCode 12.
+
+
 ## [1.1.4]
 
 ### Changed

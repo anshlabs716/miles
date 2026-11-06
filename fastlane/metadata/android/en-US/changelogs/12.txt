@@ -1,0 +1,7 @@
+- The route builder's navigation banner now shows real data: distance to the next point, the actual waypoint name, remaining distance and a real off-route warning, instead of the hard-coded "In 150m, Turn Right / Onto Pine Ridge Trail"
+- Maps settings now work outside the Settings screen: default map layer, auto-centering, keep-screen-on during workouts, breadcrumb colour style, heading rotation and the GPS accuracy filter are all honoured by the map and the engine
+- The AMOLED Dark map layer now really loads dark tiles instead of staying on OpenStreetMap
+- Course Heading Up now rotates the map; Fixed North Up is unchanged
+- The GPS outlier filter slider is no longer ignored
+- The map layer chips (including Satellite) scroll instead of getting squeezed on narrow screens
+- Bumped to versionCode 12

@@ -56,6 +56,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -67,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -88,7 +90,12 @@ fun WorkoutHudScreen(
     smartEngine: SmartTrackingEngine,
     onFinishWorkout: (ActivityEntity) -> Unit,
     onDiscardWorkout: () -> Unit,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    initialTileSource: com.example.miles.ui.map.RealOsmTileSource = com.example.miles.ui.map.RealOsmTileSource.STANDARD,
+    mapAutoFollow: Boolean = true,
+    mapKeepScreenOn: Boolean = true,
+    polylineColorMode: String = "SPEED_GRADIENT",
+    headingRotationMode: String = "NORTH_UP"
 ) {
     val liveStats by smartEngine.liveStats.collectAsState()
     val hrSensorState by smartEngine.heartRateSensorState.collectAsState()
@@ -105,6 +112,15 @@ fun WorkoutHudScreen(
     var showSaveDialog by remember { mutableStateOf(false) }
     var showAddWaypointDialog by remember { mutableStateOf(false) }
     var mapStyle by remember { mutableStateOf(MapStyleMode.STANDARD) }
+
+    // Keep screen awake during the workout when the user's Maps setting asks for it.
+    val hudContext = LocalContext.current
+    DisposableEffect(mapKeepScreenOn) {
+        val window = (hudContext as? android.app.Activity)?.window
+        if (mapKeepScreenOn) window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
 
     var workoutTitle by remember { mutableStateOf("") }
     var workoutNotes by remember { mutableStateOf("") }
@@ -451,7 +467,11 @@ fun WorkoutHudScreen(
                         formatDuration = { smartEngine.formatDuration(it) },
                         formatElapsedTime = { smartEngine.formatElapsedTime(it) },
                         formatPace = { smartEngine.formatPace(it) },
-                        mapStyle = mapStyle
+                        mapStyle = mapStyle,
+                        initialTileSource = initialTileSource,
+                        mapAutoFollow = mapAutoFollow,
+                        polylineColorMode = polylineColorMode,
+                        headingRotationMode = headingRotationMode
                     )
                     1 -> BiometricsPage(liveStats = liveStats, hrSensorState = hrSensorState)
                     2 -> GhostAndSplitsPage(
@@ -669,7 +689,11 @@ fun PrimaryHudPage(
     formatDuration: (Long) -> String,
     formatElapsedTime: (Long) -> String,
     formatPace: (Double) -> String,
-    mapStyle: MapStyleMode
+    mapStyle: MapStyleMode,
+    initialTileSource: com.example.miles.ui.map.RealOsmTileSource = com.example.miles.ui.map.RealOsmTileSource.STANDARD,
+    mapAutoFollow: Boolean = true,
+    polylineColorMode: String = "SPEED_GRADIENT",
+    headingRotationMode: String = "NORTH_UP"
 ) {
     Column(
         modifier = Modifier
@@ -849,7 +873,15 @@ fun PrimaryHudPage(
                 points = liveStats.points,
                 waypoints = liveStats.waypoints,
                 userLocation = liveStats.points.lastOrNull(),
-                autoCenter = true,
+                autoCenter = mapAutoFollow,
+                polylineColorMode = polylineColorMode,
+                headingRotationMode = headingRotationMode,
+                initialTileSource = when (mapStyle) {
+                    MapStyleMode.SATELLITE -> com.example.miles.ui.map.RealOsmTileSource.SATELLITE
+                    MapStyleMode.TERRAIN -> com.example.miles.ui.map.RealOsmTileSource.OPEN_TOPO
+                    MapStyleMode.AMOLED_DARK -> com.example.miles.ui.map.RealOsmTileSource.CARTO_DARK
+                    else -> initialTileSource
+                },
                 showControls = true
             )
         }

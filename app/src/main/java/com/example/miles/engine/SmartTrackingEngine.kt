@@ -506,9 +506,13 @@ class SmartTrackingEngine(
             val legDist = MilesRepository.calculateDistanceMeters(last.latitude, last.longitude, point.latitude, point.longitude)
 
             // Stationary noise & GPS drift deadband filter:
-            // Tolerant of realistic mobile GPS accuracies (up to 65m) and indoor/urban canyon signals
-            // Only reject extreme outliers (> 70m with negligible leg distance) or true sub-decimeter jitter (< 0.35m)
-            val isStationaryNoise = (point.accuracy > 70.0f && legDist < 5.0) || (legDist < 0.35)
+            // The accuracy threshold comes from the Maps settings ("GPS Outlier Noise
+            // Filter"), so a point that is both imprecise and barely moved is dropped
+            // instead of accumulating artificial drift. Legs of real movement (>=5 m)
+            // are always kept, as is true sub-decimeter jitter (<0.35 m).
+            val accuracyLimitM = (context.getSharedPreferences("miles_settings", Context.MODE_PRIVATE)
+                .all["min_gps_acc_filter"] as? Number)?.toFloat() ?: 25.0f
+            val isStationaryNoise = (point.accuracy > accuracyLimitM && legDist < 5.0) || (legDist < 0.35)
 
             if (isStationaryNoise) {
                 // Device is stationary: update current altitude and GPS accuracy without accumulating artificial drift

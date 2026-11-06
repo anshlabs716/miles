@@ -60,6 +60,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -100,6 +102,20 @@ enum class RealOsmTileSource(val title: String, val attribution: String) {
     HUMANITARIAN("Humanitarian OSM", "© Humanitarian OSM / HOT")
 }
 
+/** Maps the Settings "Default Map Renderer" preference onto a real tile source. */
+fun mapLayerToTileSource(layer: String): RealOsmTileSource = when (layer) {
+    "DARK_VECTOR" -> RealOsmTileSource.CARTO_DARK   // "AMOLED Dark" setting
+    "TOPO_OUTDOOR" -> RealOsmTileSource.OPEN_TOPO
+    "SATELLITE" -> RealOsmTileSource.SATELLITE
+    else -> RealOsmTileSource.STANDARD
+}
+
+private fun lerpColor(from: Color, to: Color, t: Float): Color = Color(
+    red = from.red + (to.red - from.red) * t,
+    green = from.green + (to.green - from.green) * t,
+    blue = from.blue + (to.blue - from.blue) * t
+)
+
 @Composable
 fun RealOsmMapView(
     modifier: Modifier = Modifier,
@@ -114,6 +130,8 @@ fun RealOsmMapView(
     initialTileSource: RealOsmTileSource = RealOsmTileSource.STANDARD,
     currentTileSource: RealOsmTileSource? = null,
     onTileSourceChanged: ((RealOsmTileSource) -> Unit)? = null,
+    polylineColorMode: String = "SPEED_GRADIENT",
+    headingRotationMode: String = "NORTH_UP",
     onCenterChanged: ((Double, Double) -> Unit)? = null,
     recenterRequest: Int = 0,
     zoomRequest: Int = 0
@@ -265,6 +283,12 @@ fun RealOsmMapView(
         val heightPx = with(density) { maxHeight.toPx() }
 
         // Gesture handling for drag pan and pinch zoom
+        // Heading-up mode rotates the map content; pan deltas must be un-rotated so the
+        // map still tracks the finger.
+        val headingDeg = if (headingRotationMode == "HEADING_UP") {
+            (effectiveUserLocation?.bearing ?: 0f).let { if (it == 0f) 0f else it }
+        } else 0f
+        val headingRad = Math.toRadians(headingDeg.toDouble())
         val gestureModifier = if (isInteractive) {
             Modifier.pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
@@ -273,10 +297,14 @@ fun RealOsmMapView(
                     val newZoom = (oldZoom + (zoom - 1f) * 2f).coerceIn(3f, 19f)
                     zoomLevel = newZoom
 
+                    // Screen delta -> map-content delta (undo the heading rotation)
+                    val panX = pan.x * cos(headingRad).toFloat() - pan.y * sin(headingRad).toFloat()
+                    val panY = pan.x * sin(headingRad).toFloat() + pan.y * cos(headingRad).toFloat()
+
                     val tileSize = 256.0 * 2.0.pow(newZoom.toDouble())
-                    val lonDelta = -(pan.x / tileSize) * 360.0
+                    val lonDelta = -(panX / tileSize) * 360.0
                     val latRad = Math.toRadians(centerLat)
-                    val latDelta = (pan.y / tileSize) * (360.0 * cos(latRad))
+                    val latDelta = (panY / tileSize) * (360.0 * cos(latRad))
 
                     centerLon = (centerLon + lonDelta).coerceIn(-180.0, 180.0)
                     centerLat = (centerLat + latDelta).coerceIn(-85.0, 85.0)
@@ -292,6 +320,16 @@ fun RealOsmMapView(
                 .fillMaxSize()
                 .then(gestureModifier)
         ) {
+            // Map content (tiles + vector overlay) rotates with the heading in
+            // "Course Heading Up" mode; the floating controls below stay screen-aligned.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = -headingDeg
+                        transformOrigin = TransformOrigin.Center
+                    }
+            ) {
             // 1. RENDER REAL OPENSTREETMAP TILE SLICES
             val zoomInt = zoomLevel.roundToInt().coerceIn(3, 19)
             val numTiles = 2.0.pow(zoomInt.toDouble())
@@ -401,12 +439,24 @@ fun RealOsmMapView(
                         color = Color.Black.copy(alpha = 0.5f),
                         style = Stroke(width = 11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
                     )
-                    // Core route line
-                    drawPath(
-                        path = path,
-                        color = Color(0xFF00E5FF),
-                        style = Stroke(width = 7f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    )
+                    // Core route line — colour comes from the Maps setting when set.
+                    if (polylineColorMode == "SPEED_GRADIENT" && points.size >= 2) {
+                        // Speed heatmap: each leg coloured by the speed that was recorded on it.
+                        for (i in 1 until points.size) {
+                            val a = geoToPixel(points[i - 1].latitude, points[i - 1].longitude)
+                            val b = geoToPixel(points[i].latitude, points[i].longitude)
+                            val speedKmh = points[i].speed * 3.6f
+                            val t = (speedKmh / 18f).coerceIn(0f, 1f) // 0 = standing, 18+ km/h = hot
+                            val legColor = lerpColor(Color(0xFF00E5FF), Color(0xFFFF2D55), t)
+                            drawLine(legColor, a, b, strokeWidth = 7f, cap = StrokeCap.Round)
+                        }
+                    } else {
+                        drawPath(
+                            path = path,
+                            color = Color(0xFF00E5FF),
+                            style = Stroke(width = 7f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                    }
 
                     // Start pin
                     drawCircle(color = Color(0xFF00E676), radius = 10f, center = firstPx)
@@ -509,6 +559,7 @@ fun RealOsmMapView(
                     )
                 }
             }
+            } // end rotated map content (heading-up)
 
             // 3. FLOATING MAP CONTROLS
             if (showControls) {

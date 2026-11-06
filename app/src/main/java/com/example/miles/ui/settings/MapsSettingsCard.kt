@@ -1,5 +1,7 @@
 package com.example.miles.ui.settings
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +50,11 @@ fun MapsSettingsCard(
             // Map Layer selection
             Text("Default Map Renderer", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    // Scroll instead of squeezing the last chip ("Satellite") off the edge.
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
