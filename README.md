@@ -21,7 +21,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/STATUS-1.1.6-success?style=for-the-badge" alt="Version 1.1.6">
-  <img src="https://img.shields.io/badge/versionCode-9-blue?style=for-the-badge" alt="versionCode 9">
+  <img src="https://img.shields.io/badge/versionCode-13-blue?style=for-the-badge" alt="versionCode 13">
   <img src="https://img.shields.io/badge/KOTLIN-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/JETPACK%20COMPOSE-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
 </p>
