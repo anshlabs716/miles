@@ -108,7 +108,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 | Area | Status |
 | --- | --- |
-| Android app | **1.1.6 released (versionCode 9)** |
+| Android app | **1.1.6 released (versionCode 13)** |
 | Step tracking | Implemented |
 | GPS tracking | Implemented |
 | BLE sensors | Foundation implemented |
