@@ -174,10 +174,22 @@ class SmartTrackingEngine(
     val navigationTts = NavigationTtsManager(context)
     val targetAlertManager = WorkoutTargetAlertManager(context, navigationTts)
 
+    /** Pushes the user's target-zone alert settings (pace / speed / HR) into the alert manager. */
+    fun applyTargetAlertPreferences(prefs: com.example.miles.data.local.UserPreferences) {
+        targetAlertManager.config = targetAlertManager.config.withPreferences(prefs)
+    }
+
     // Kalman / smoothing state
     private var lastFilteredPoint: GpsPoint? = null
 
     init {
+        // Load saved alert settings up front so a workout restored by the foreground service
+        // (with no Activity running) still honours them. MainActivity re-applies on every change.
+        runCatching {
+            applyTargetAlertPreferences(
+                com.example.miles.data.local.MilesPreferences(context).userPreferences.value
+            )
+        }
         restoreTrackingStateIfAvailable()
     }
 

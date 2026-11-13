@@ -51,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -104,7 +105,9 @@ fun WorkoutHudScreen(
     mapAutoFollow: Boolean = true,
     mapKeepScreenOn: Boolean = true,
     polylineColorMode: String = "SPEED_GRADIENT",
-    headingRotationMode: String = "NORTH_UP"
+    headingRotationMode: String = "NORTH_UP",
+    paceAlertEnabled: Boolean = true,
+    onPaceAlertEnabledChange: (Boolean) -> Unit = {}
 ) {
     val liveStats by smartEngine.liveStats.collectAsState()
     val hrSensorState by smartEngine.heartRateSensorState.collectAsState()
@@ -487,7 +490,9 @@ fun WorkoutHudScreen(
                     2 -> GhostAndSplitsPage(
                         liveStats = liveStats,
                         smartEngine = smartEngine,
-                        formatPace = { smartEngine.formatPace(it) }
+                        formatPace = { smartEngine.formatPace(it) },
+                        paceAlertEnabled = paceAlertEnabled,
+                        onPaceAlertEnabledChange = onPaceAlertEnabledChange
                     )
                 }
             }
@@ -1000,7 +1005,9 @@ fun BiometricsPage(
 fun GhostAndSplitsPage(
     liveStats: com.example.miles.engine.LiveWorkoutStats,
     smartEngine: com.example.miles.engine.SmartTrackingEngine,
-    formatPace: (Double) -> String
+    formatPace: (Double) -> String,
+    paceAlertEnabled: Boolean = true,
+    onPaceAlertEnabledChange: (Boolean) -> Unit = {}
 ) {
     var selectedTargetPaceSec by remember { mutableStateOf(smartEngine.targetPaceSecPerKm) }
 
@@ -1055,7 +1062,25 @@ fun GhostAndSplitsPage(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                // Pace alerts (vibration / voice when off target). Same setting as in
+                // Settings → Target Zone Alerts; the ghost pacer keeps working either way.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (paceAlertEnabled) "Pace alerts on" else "Pace alerts off",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = paceAlertEnabled,
+                        onCheckedChange = onPaceAlertEnabledChange
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 val delta = liveStats.ghostDeltaDistanceM ?: 0.0
                 val isAhead = delta >= 0.0
