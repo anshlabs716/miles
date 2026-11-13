@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,7 +27,9 @@ import com.example.miles.data.local.DistanceUnit
 import com.example.miles.data.local.MilesPreferences
 import com.example.miles.data.local.UserPreferences
 import com.example.miles.data.repository.format
+import com.example.miles.engine.WorkoutTargetAlertManager
 import com.example.miles.ui.theme.LiquidGlassCard
+import kotlin.math.roundToInt
 
 @Composable
 fun WorkoutSettingsCard(
@@ -128,30 +132,9 @@ fun WorkoutSettingsCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Heart Rate Zone Alarm
-            SettingRow(
-                title = "Max HR Zone Alarm",
-                subtitle = "Triggers urgent vibration & alert when exceeding BPM limit",
-                checked = userPrefs.hrZoneAlarmEnabled,
-                onCheckedChange = { preferences.updatePreferences { p -> p.copy(hrZoneAlarmEnabled = it) } }
-            )
-
-            if (userPrefs.hrZoneAlarmEnabled) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Alarm Trigger Threshold: ${userPrefs.hrZoneAlarmBpm} BPM",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = userPrefs.hrZoneAlarmBpm.toFloat(),
-                    onValueChange = { preferences.updatePreferences { p -> p.copy(hrZoneAlarmBpm = it.toInt()) } },
-                    valueRange = 130f..210f,
-                    steps = 15
-                )
-            }
+            TargetZoneAlertSettings(userPrefs = userPrefs, preferences = preferences)
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -198,5 +181,126 @@ fun WorkoutSettingsCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Live target-zone alerts evaluated during a workout by WorkoutTargetAlertManager:
+ * heart-rate zone, pace window around the HUD's target pace, and a speed window.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TargetZoneAlertSettings(
+    userPrefs: UserPreferences,
+    preferences: MilesPreferences
+) {
+    Text(
+        text = "Target Zone Alerts",
+        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+    )
+    Text(
+        text = "Live cues during a workout when you drift outside your target zone " +
+            "(at most one every ${WorkoutTargetAlertManager.ALERT_COOLDOWN_MS / 1000}s)",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // Heart rate zone
+    SettingRow(
+        title = "Heart Rate Zone Alert",
+        subtitle = "Alert when heart rate leaves the zone below",
+        checked = userPrefs.hrAlertEnabled,
+        onCheckedChange = { preferences.updatePreferences { p -> p.copy(hrAlertEnabled = it) } }
+    )
+    if (userPrefs.hrAlertEnabled) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Zone: ${userPrefs.hrAlertMinBpm}–${userPrefs.hrAlertMaxBpm} BPM",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        RangeSlider(
+            value = userPrefs.hrAlertMinBpm.toFloat()..userPrefs.hrAlertMaxBpm.toFloat(),
+            onValueChange = { range ->
+                preferences.updatePreferences { p ->
+                    p.copy(hrAlertMinBpm = range.start.toInt(), hrAlertMaxBpm = range.endInclusive.toInt())
+                }
+            },
+            valueRange = 80f..210f,
+            steps = 25
+        )
+    }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // Pace window around the HUD target pace
+    SettingRow(
+        title = "Pace Alert",
+        subtitle = "Alert when pace drifts from the target pace set in the workout HUD",
+        checked = userPrefs.paceAlertEnabled,
+        onCheckedChange = { preferences.updatePreferences { p -> p.copy(paceAlertEnabled = it) } }
+    )
+    if (userPrefs.paceAlertEnabled) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Tolerance: ±${userPrefs.paceAlertToleranceSec}s per km",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Slider(
+            value = userPrefs.paceAlertToleranceSec.toFloat(),
+            onValueChange = { preferences.updatePreferences { p -> p.copy(paceAlertToleranceSec = it.toInt()) } },
+            valueRange = 5f..60f,
+            steps = 10
+        )
+    }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // Speed window
+    SettingRow(
+        title = "Speed Alert",
+        subtitle = "Alert when speed leaves the range below (useful for cycling)",
+        checked = userPrefs.speedAlertEnabled,
+        onCheckedChange = { preferences.updatePreferences { p -> p.copy(speedAlertEnabled = it) } }
+    )
+    if (userPrefs.speedAlertEnabled) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Range: ${userPrefs.speedAlertMinKmh.format(0)}–${userPrefs.speedAlertMaxKmh.format(0)} km/h",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        RangeSlider(
+            value = userPrefs.speedAlertMinKmh..userPrefs.speedAlertMaxKmh,
+            onValueChange = { range ->
+                preferences.updatePreferences { p ->
+                    p.copy(
+                        speedAlertMinKmh = range.start.roundToInt().toFloat(),
+                        speedAlertMaxKmh = range.endInclusive.roundToInt().toFloat()
+                    )
+                }
+            },
+            valueRange = 2f..60f,
+            steps = 57
+        )
+    }
+
+    // How alerts are delivered (only relevant when at least one alert is on)
+    if (userPrefs.hrAlertEnabled || userPrefs.paceAlertEnabled || userPrefs.speedAlertEnabled) {
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingRow(
+            title = "Vibrate on Alert",
+            checked = userPrefs.targetAlertHaptic,
+            onCheckedChange = { preferences.updatePreferences { p -> p.copy(targetAlertHaptic = it) } }
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        SettingRow(
+            title = "Speak Alert",
+            checked = userPrefs.targetAlertVoice,
+            onCheckedChange = { preferences.updatePreferences { p -> p.copy(targetAlertVoice = it) } }
+        )
     }
 }

@@ -130,8 +130,19 @@ data class UserPreferences(
     val autoPauseSensitivityKmh: Float = 1.5f,
     val cadenceMetronomeEnabled: Boolean = false,
     val targetCadenceSpm: Int = 170,
-    val hrZoneAlarmEnabled: Boolean = false,
-    val hrZoneAlarmBpm: Int = 180,
+
+    // Live target-zone alerts (WorkoutTargetAlertManager). Defaults match the engine's
+    // previous hard-coded TargetZoneConfig so existing behaviour is unchanged.
+    val paceAlertEnabled: Boolean = true,
+    val paceAlertToleranceSec: Int = 25,
+    val speedAlertEnabled: Boolean = false,
+    val speedAlertMinKmh: Float = 8.0f,
+    val speedAlertMaxKmh: Float = 16.0f,
+    val hrAlertEnabled: Boolean = true,
+    val hrAlertMinBpm: Int = 120,
+    val hrAlertMaxBpm: Int = 175,
+    val targetAlertHaptic: Boolean = true,
+    val targetAlertVoice: Boolean = true,
 
     // Map & Navigation
     val defaultMapLayer: String = "OPEN_STREET_MAP",
@@ -334,8 +345,16 @@ class MilesPreferences(context: Context) {
             autoPauseSensitivityKmh = prefFloat("auto_pause_sens", 1.5f),
             cadenceMetronomeEnabled = prefBoolean("cadence_metronome", false),
             targetCadenceSpm = prefInt("target_cadence_spm", 170),
-            hrZoneAlarmEnabled = prefBoolean("hr_zone_alarm", false),
-            hrZoneAlarmBpm = prefInt("hr_zone_alarm_bpm", 180),
+            paceAlertEnabled = prefBoolean("pace_alert_en", true),
+            paceAlertToleranceSec = prefInt("pace_alert_tol_sec", 25),
+            speedAlertEnabled = prefBoolean("speed_alert_en", false),
+            speedAlertMinKmh = prefFloat("speed_alert_min_kmh", 8.0f),
+            speedAlertMaxKmh = prefFloat("speed_alert_max_kmh", 16.0f),
+            hrAlertEnabled = prefBoolean("hr_alert_en", true),
+            hrAlertMinBpm = prefInt("hr_alert_min_bpm", 120),
+            hrAlertMaxBpm = prefInt("hr_alert_max_bpm", 175),
+            targetAlertHaptic = prefBoolean("target_alert_haptic", true),
+            targetAlertVoice = prefBoolean("target_alert_voice", true),
 
             defaultMapLayer = prefString("default_map_layer", "OPEN_STREET_MAP"),
             mapAutoFollow = prefBoolean("map_auto_follow", true),
@@ -565,8 +584,16 @@ class MilesPreferences(context: Context) {
             .putFloat("auto_pause_sens", updated.autoPauseSensitivityKmh)
             .putBoolean("cadence_metronome", updated.cadenceMetronomeEnabled)
             .putInt("target_cadence_spm", updated.targetCadenceSpm)
-            .putBoolean("hr_zone_alarm", updated.hrZoneAlarmEnabled)
-            .putInt("hr_zone_alarm_bpm", updated.hrZoneAlarmBpm)
+            .putBoolean("pace_alert_en", updated.paceAlertEnabled)
+            .putInt("pace_alert_tol_sec", updated.paceAlertToleranceSec)
+            .putBoolean("speed_alert_en", updated.speedAlertEnabled)
+            .putFloat("speed_alert_min_kmh", updated.speedAlertMinKmh)
+            .putFloat("speed_alert_max_kmh", updated.speedAlertMaxKmh)
+            .putBoolean("hr_alert_en", updated.hrAlertEnabled)
+            .putInt("hr_alert_min_bpm", updated.hrAlertMinBpm)
+            .putInt("hr_alert_max_bpm", updated.hrAlertMaxBpm)
+            .putBoolean("target_alert_haptic", updated.targetAlertHaptic)
+            .putBoolean("target_alert_voice", updated.targetAlertVoice)
             .putString("default_map_layer", updated.defaultMapLayer)
             .putBoolean("map_auto_follow", updated.mapAutoFollow)
             .putBoolean("map_keep_screen_on", updated.mapKeepScreenOn)

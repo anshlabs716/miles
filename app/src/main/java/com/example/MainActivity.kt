@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity() {
             val userPrefs by preferences.userPreferences.collectAsState()
             val activities by repository.activities.collectAsState(initial = emptyList())
             val liveStats by smartEngine.liveStats.collectAsState()
+            LaunchedEffect(userPrefs) { smartEngine.applyTargetAlertPreferences(userPrefs) }
             val powerManager = remember { getSystemService(Context.POWER_SERVICE) as? PowerManager }
             // Shown once unless the user hasn't granted the exemption yet; "Not Now" is persisted
             // so the dialog doesn't come back on every cold start and rotation.
@@ -349,7 +350,7 @@ class MainActivity : ComponentActivity() {
                             }
                             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                                 when (subScreen) {
-                                    MilesSubScreen.WORKOUT_HUD -> WorkoutHudScreen(smartEngine = smartEngine, onFinishWorkout = { saved -> selectedActivity = saved; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onDiscardWorkout = { subScreen = MilesSubScreen.NONE }, onBack = { subScreen = MilesSubScreen.NONE }, initialTileSource = mapLayerToTileSource(userPrefs.defaultMapLayer), mapAutoFollow = userPrefs.mapAutoFollow, mapKeepScreenOn = userPrefs.mapKeepScreenOn, polylineColorMode = userPrefs.mapPolylineColorMode, headingRotationMode = userPrefs.mapHeadingRotationMode)
+                                    MilesSubScreen.WORKOUT_HUD -> WorkoutHudScreen(smartEngine = smartEngine, onFinishWorkout = { saved -> selectedActivity = saved; subScreen = MilesSubScreen.ACTIVITY_DETAIL }, onDiscardWorkout = { subScreen = MilesSubScreen.NONE }, onBack = { subScreen = MilesSubScreen.NONE }, initialTileSource = mapLayerToTileSource(userPrefs.defaultMapLayer), mapAutoFollow = userPrefs.mapAutoFollow, mapKeepScreenOn = userPrefs.mapKeepScreenOn, polylineColorMode = userPrefs.mapPolylineColorMode, headingRotationMode = userPrefs.mapHeadingRotationMode, paceAlertEnabled = userPrefs.paceAlertEnabled, onPaceAlertEnabledChange = { enabled -> preferences.updatePreferences { it.copy(paceAlertEnabled = enabled) } })
                                     MilesSubScreen.ACTIVITY_DETAIL -> selectedActivity?.let { act -> ActivityDetailScreen(activity = act, repository = repository, unit = userPrefs.unit, initialTileSource = mapLayerToTileSource(userPrefs.defaultMapLayer), polylineColorMode = userPrefs.mapPolylineColorMode, onBack = { subScreen = MilesSubScreen.NONE }, onSetAsGhostReference = { ghost -> smartEngine.setGhostModeActivity(ghost) }, onDeleted = { subScreen = MilesSubScreen.NONE }) } ?: run { subScreen = MilesSubScreen.NONE }
                                     MilesSubScreen.DEVICES -> DevicesScreen(deviceManager = deviceManager, wearCompanion = wearCompanion, preferences = preferences, moveReminderManager = moveReminderManager)
                                     MilesSubScreen.STUDIO -> MilesStudioScreen(repository = repository, smartEngine = smartEngine, wearCompanion = wearCompanion, preferences = preferences, onBack = { subScreen = MilesSubScreen.NONE }, onOpenDistanceCalculator = { subScreen = MilesSubScreen.DISTANCE_CALCULATOR })
