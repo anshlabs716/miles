@@ -15,6 +15,11 @@
     <td align="center" valign="top"><img src="docs/screenshots/6-maps-satellite.webp" width="70%" alt="Satellite maps"><br><sub>Satellite maps</sub></td>
   </tr>
 </table>
+<p align="center">
+  <a href="https://f-droid.org/packages/com.aistudio.miles.track/">
+    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
+  </a>
+</p>
 </div>
 
 ### A modern, customizable, privacy-focused activity tracker for Android.
