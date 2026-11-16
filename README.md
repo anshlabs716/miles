@@ -16,12 +16,8 @@
   </tr>
 </table>
 <p align="center">
-  <a href="intent://details?id=com.anshlabs.miles#Intent;scheme=market;package=org.fdroid.fdroid;end">
+  <a href="fdroid://details?id=com.anshlabs.miles">
     <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="110">
-  </a>
-  &nbsp;
-  <a href="intent://details?id=com.anshlabs.miles#Intent;scheme=market;package=org.fdroid.basic;end">
-    <img src="https://img.shields.io/badge/Get%20it%20on-F--Droid%20Basic-4A8BCA?style=for-the-badge&logo=fdroid&logoColor=white" alt="Get it on F-Droid Basic" height="55">
   </a>
 </p>
 </div>
