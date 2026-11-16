@@ -16,8 +16,8 @@
   </tr>
 </table>
 <p align="center">
-  <a href="https://f-droid.org/packages/com.aistudio.miles.track/">
-    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
+  <a href="https://f-droid.org/packages/com.anshlabs.miles/">
+    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="110">
   </a>
 </p>
 </div>
