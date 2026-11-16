@@ -16,7 +16,7 @@
   </tr>
 </table>
 <p align="center">
-  <a href="fdroid://details?id=com.anshlabs.miles">
+  <a href="https://f-droid.org/packages/com.anshlabs.miles/">
     <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="110">
   </a>
 </p>
