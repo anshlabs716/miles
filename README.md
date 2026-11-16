@@ -16,8 +16,12 @@
   </tr>
 </table>
 <p align="center">
-  <a href="https://f-droid.org/packages/com.anshlabs.miles/">
+  <a href="intent://details?id=com.anshlabs.miles#Intent;scheme=market;package=org.fdroid.fdroid;end">
     <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="110">
+  </a>
+  &nbsp;
+  <a href="intent://details?id=com.anshlabs.miles#Intent;scheme=market;package=org.fdroid.basic;end">
+    <img src="https://img.shields.io/badge/Get%20it%20on-F--Droid%20Basic-4A8BCA?style=for-the-badge&logo=fdroid&logoColor=white" alt="Get it on F-Droid Basic" height="55">
   </a>
 </p>
 </div>
@@ -179,12 +183,11 @@ miles/
 │   ├── backup-and-restore.md
 │   ├── bluetooth-sensors.md
 │   ├── building.md
-│   ├── compatibility.md
+│   ├── changelog.md
 │   ├── configuration.md
 │   ├── data-storage.md
 │   ├── dependencies.md
 │   ├── development.md
-│   ├── faq.md
 │   ├── fixtures/
 │   │   └── README.md
 │   ├── health-connect.md
@@ -193,7 +196,6 @@ miles/
 │   ├── location-tracking.md
 │   ├── permissions.md
 │   ├── privacy.md
-│   ├── releasing.md
 │   ├── screenshots/
 │   │   ├── 1-dashboard.webp
 │   │   ├── 2-journal-history.webp
@@ -230,6 +232,7 @@ miles/
 ├── README.md
 ├── RELEASE_PROCESS.md
 ├── SECURITY.md
+├── settings.gradle.kts
 ├── settings.gradle.kts
 ├── SUPPORT.md
 └── THIRD_PARTY_NOTICES.md
