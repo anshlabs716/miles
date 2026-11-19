@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.example.miles.data.local.UserPreferences
 import java.util.Locale
 
 data class TargetZoneConfig(
@@ -20,6 +21,29 @@ data class TargetZoneConfig(
     val hapticEnabled: Boolean = true,
     val voiceEnabled: Boolean = true
 )
+
+/**
+ * Applies the user's alert settings. The target pace is deliberately left alone: it is owned
+ * by [SmartTrackingEngine.targetPaceSecPerKm], which the workout HUD's pace picker sets.
+ */
+fun TargetZoneConfig.withPreferences(prefs: UserPreferences): TargetZoneConfig {
+    val minHr = minOf(prefs.hrAlertMinBpm, prefs.hrAlertMaxBpm)
+    val maxHr = maxOf(prefs.hrAlertMinBpm, prefs.hrAlertMaxBpm)
+    val minSpeed = minOf(prefs.speedAlertMinKmh, prefs.speedAlertMaxKmh).toDouble()
+    val maxSpeed = maxOf(prefs.speedAlertMinKmh, prefs.speedAlertMaxKmh).toDouble()
+    return copy(
+        paceAlertEnabled = prefs.paceAlertEnabled,
+        paceToleranceSec = prefs.paceAlertToleranceSec.coerceIn(5, 120).toDouble(),
+        speedAlertEnabled = prefs.speedAlertEnabled,
+        minSpeedKmh = minSpeed,
+        maxSpeedKmh = maxSpeed,
+        hrAlertEnabled = prefs.hrAlertEnabled,
+        minHeartRateBpm = minHr,
+        maxHeartRateBpm = maxHr,
+        hapticEnabled = prefs.targetAlertHaptic,
+        voiceEnabled = prefs.targetAlertVoice
+    )
+}
 
 sealed class WorkoutAlert {
     data class PaceAlert(val message: String, val isTooSlow: Boolean) : WorkoutAlert()
@@ -41,7 +65,12 @@ class WorkoutTargetAlertManager(
 
     var config: TargetZoneConfig = TargetZoneConfig()
     private var lastAlertTimeMs: Long = 0L
-    private val alertCooldownMs = 15_000L // Don't annoy user more than once every 15s
+    private val alertCooldownMs = ALERT_COOLDOWN_MS
+
+    companion object {
+        /** Minimum gap between two target-zone alerts, so the user isn't nagged constantly. */
+        const val ALERT_COOLDOWN_MS = 15_000L
+    }
 
     fun evaluateMetrics(
         paceSecPerKm: Double,

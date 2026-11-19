@@ -4,6 +4,23 @@ All notable changes to MILES are recorded here.
 
 ## [Unreleased]
 
+### Added
+- Settings → Workout now has a "Target Zone Alerts" section for the live pace,
+  speed and heart-rate alerts. Each alert can be switched on or off with its own
+  range (heart-rate zone, pace tolerance around the target pace, speed range),
+  and vibration and spoken cues can be toggled separately. Previously these
+  alerts ran with fixed built-in values that could not be changed or turned off.
+  Defaults match the old built-in values, so behaviour is unchanged until the
+  user adjusts them. Alerts react only to measured data (live heart rate from a
+  connected sensor, GPS speed and pace).
+- The workout HUD's ghost-pacer page has a "Pace alerts" switch next to the
+  target-pace picker; it is the same setting as in Settings.
+
+### Removed
+- The "Max HR Zone Alarm" toggle in Settings. It was saved but never read by
+  the tracking engine, so it had no effect; the new heart-rate zone alert
+  replaces it.
+
 ## [1.1.6]
 
 ### Fixed
