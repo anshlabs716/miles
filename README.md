@@ -16,8 +16,8 @@
   </tr>
 </table>
 <p align="center">
-  <a href="intent://details?id=com.anshlabs.miles#Intent;scheme=fdroid;S.browser_fallback_url=https%3A%2F%2Ff-droid.org%2Fpackages%2Fcom.anshlabs.miles%2F;end">
-    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="110">
+  <a href="https://f-droid.org/packages/com.anshlabs.miles/">
+    <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
   </a>
 </p>
 </div>
